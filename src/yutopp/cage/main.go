@@ -1,12 +1,21 @@
+//
+// Copyright yutopp 2014 - .
+//
+// Distributed under the Boost Software License, Version 1.0.
+// (See accompanying file LICENSE_1_0.txt or copy at
+// http://www.boost.org/LICENSE_1_0.txt)
+//
+
 package main
 
 import (
 	"fmt"
 	"log"
 	"io/ioutil"
-	"gopkg.in/yaml.v1"
 
-	"./torigoya/cage"
+	"yutopp/torigoya/cage"
+
+	"gopkg.in/v1/yaml"
 )
 
 type Config map[string]struct {

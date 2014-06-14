@@ -1,0 +1,9 @@
+GOPATH=`pwd` go get gopkg.in/v1/yaml
+GOPATH=`pwd` go get github.com/jmcvetta/randutil
+GOPATH=`pwd` go get github.com/ugorji/go/codec
+
+make -f Makefile.posix
+GOPATH=`pwd` go build github.com/yutopp/cage
+GOPATH=`pwd` go build github.com/yutopp/cage.callback
+
+make -f Makefile.posix&& GOPATH=`pwd` go build yutopp/cage.callback && sudo GOPATH=`pwd` go test -v yutopp/torigoya/cage
