@@ -178,9 +178,8 @@ func (ctx *Context) createMultipleTarget(
 	if err := os.Mkdir(user_dir_path, os.ModeDir); err != nil {
 		return nil, errors.New(fmt.Sprintf("Couldn't create directory %s (%s)", user_dir_path, err))
 	}
-
-	// host_user_id:managed_group_id // r-x/---/---
-	if err := guardPath(user_dir_path, host_user_id, managed_group_id, 0500); err != nil {
+	// host_user_id:host_user_id // r-x/r-x/---
+	if err := guardPath(user_dir_path, host_user_id, managed_group_id, 0550); err != nil {
 		return nil, err
 	}
 
@@ -189,7 +188,7 @@ func (ctx *Context) createMultipleTarget(
 
 	// create /home
 	user_home_base_path := filepath.Join(user_dir_path, ctx.homeDir)
-	if err:=os.Mkdir(user_home_base_path, os.ModeDir); err != nil {
+	if err := os.Mkdir(user_home_base_path, os.ModeDir); err != nil {
 		return nil, errors.New(fmt.Sprintf("Couldn't create directory %s (%s)", user_home_base_path, err))
 	}
 	// host_user_id:managed_group_id // r-x/---/---
@@ -199,11 +198,11 @@ func (ctx *Context) createMultipleTarget(
 
 	// create /home/torigoya
 	user_home_path := filepath.Join(user_dir_path, ctx.jailedUserDir)
-	if err:=os.Mkdir(user_home_path, os.ModeDir); err != nil {
+	if err := os.Mkdir(user_home_path, os.ModeDir); err != nil {
 		return nil, errors.New(fmt.Sprintf("Couldn't create directory %s (%s)", user_home_path, err))
 	}
-	// host_user_id:managed_group_id // rwx/---/---
-	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0700); err != nil {
+	// host_user_id:managed_group_id // rwx/r-x/---
+	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0750); err != nil {
 		return nil, err
 	}
 
@@ -273,9 +272,9 @@ func (ctx *Context) reassignTarget(
 		}
 	}
 
-	// chmod /home // host_user_id:managed_group_id // r-x/---/---
+	// chmod /home // host_user_id:managed_group_id // r-x/r-x/---
 	user_home_base_path := filepath.Join(user_dir_path, ctx.homeDir)
-	if err := guardPath(user_home_base_path, host_user_id, managed_group_id, 0500); err != nil {
+	if err := guardPath(user_home_base_path, host_user_id, managed_group_id, 0550); err != nil {
 		return "", "", err
 	}
 
@@ -292,8 +291,8 @@ func (ctx *Context) reassignTarget(
 		return "", "", err
 	}
 
-	// host_user_id:managed_group_id // r-x/---/---
-	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0500); err != nil {
+	// host_user_id:managed_group_id // rwx/r-x/---
+	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0750); err != nil {
 		return "", "", err
 	}
 
@@ -413,7 +412,28 @@ func invokeProcessClonerBase(
 		passing_info = &BrigdeInfo{}
 	}
 
+	// TODO: close on exec
+	// pipe for
+	stdout_pipe, err := makePipe()
+	if err != nil { return err }
+	defer stdout_pipe.Close()
 
+	stderr_pipe, err := makePipe()
+	if err != nil { return err }
+	defer stderr_pipe.Close()
+
+	result_pipe, err := makePipe()
+	if err != nil { return err }
+	defer result_pipe.Close()
+
+	//
+	passing_info.Pipes = &BridgePipes{
+		Stdout: stdout_pipe,
+		Stderr: stderr_pipe,
+		Result: result_pipe,
+	}
+
+	//
 	content_string, err := func() (string, error) {
 		var msgpack_bytes []byte
 		enc := codec.NewEncoderBytes(&msgpack_bytes, &msgPackHandler)
@@ -433,18 +453,9 @@ func invokeProcessClonerBase(
 		"packed_torigoya_content=" + content_string,
 	}
 
-	// get pipes
-
-	stdout_reader, err := cmd.StdoutPipe()
-	if err != nil {
-		log.Fatal("Couldn't get pipe of stdout (%s)\n", err)
-		return err
-	}
-	stderr_reader, err := cmd.StderrPipe()
-	if err != nil {
-		log.Fatal("Couldn't get pipe of stderr (%s)\n", err)
-		return err
-	}
+	// debug...
+	cmd.Stdout = os.Stdout
+    cmd.Stderr = os.Stderr
 
 	// Start Process
 	if err := cmd.Start(); err != nil {
@@ -453,21 +464,21 @@ func invokeProcessClonerBase(
 	}
 
 	// wait for exit process
-	err_c := make(chan error)
+	process_wait_c := make(chan error)
 	go func() {
-		err_c <- cmd.Wait()
+		process_wait_c <- cmd.Wait()
 	}()
 
 	// read stdout/stderr
 	stdout_c := make(chan error)
-	go readPipe(stdout_reader, stdout_c)
+	go readPipe(stdout_pipe.ReadFd, stdout_c)
 	stderr_c := make(chan error)
-	go readPipe(stderr_reader, stderr_c)
+	go readPipe(stderr_pipe.ReadFd, stderr_c)
 
 
 	// wait for finishing subprocess
 	select {
-	case err := <-err_c:
+	case err := <-process_wait_c:
 		// subprocess has been finished
 		log.Println("MYAN")
 		if err != nil {
@@ -485,22 +496,28 @@ func invokeProcessClonerBase(
 		log.Println("TIMEOUT")
 	}
 
-	//
-	stdout_err := <-stdout_c
-	stderr_err := <-stderr_c
 
-	_ = stdout_err
-	_ = stderr_err
+	select {
+	case stdout_err := <-stdout_c:
+		_ = stdout_err
+	case <-time.After(1 * time.Second):
+	}
+
+	select {
+	case stderr_err := <-stderr_c:
+		_ = stderr_err
+	case <-time.After(1 * time.Second):
+	}
 
 	return nil
 }
 
-func readPipe(reader io.Reader, cs chan<- error) {
+func readPipe(fd int, cs chan<- error) {
 	buffer := make([]byte, 1024)
 	defer close(cs)
 
 	for {
-		size, err := reader.Read(buffer)
+		size, err := syscall.Read(fd, buffer)
 		if err != nil {
 			if err == io.EOF {
 				log.Printf("= EOF!!")
@@ -511,12 +528,37 @@ func readPipe(reader io.Reader, cs chan<- error) {
 			return;
 		}
 
-		log.Printf("===> %d", size)
-		log.Printf("===> %s", string(buffer))
+		log.Printf("= %d ==> %d", fd, size)
+		log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer))
 	}
 
 	cs <- nil
 }
+
+
+
+type Pipe struct {
+	ReadFd, WriteFd		int
+}
+
+func makePipe() (*Pipe, error) {
+	pipe := make([]int, 2)
+	if err := syscall.Pipe(pipe); err != nil {
+		return nil, err
+	}
+
+	return &Pipe{pipe[0], pipe[1]}, nil
+}
+
+func (p *Pipe) Close() {
+	syscall.Close(p.ReadFd)
+	syscall.Close(p.WriteFd)
+}
+
+type BridgePipes struct {
+	Stdout, Stderr, Result	*Pipe
+}
+
 
 
 type JailedUserInfo struct {
@@ -530,6 +572,7 @@ type BrigdeInfo struct {
 	ChrootPath			string
 	JailedUserHomePath	string
 	IsReboot			bool
+	Pipes				*BridgePipes
 }
 
 
@@ -588,10 +631,6 @@ type SourceData struct {
 	Name			string
 	Code			string
 	IsCompressed	bool
-}
-
-
-type ProcProfile struct {
 }
 
 type ExecDataset struct {
@@ -655,13 +694,15 @@ func (ctx *Context) build2(
 			&ProcProfile{
 			},
 			&ExecDataset{
+				CpuTimeLimit: 10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 			},
 		},
 		ChrootPath: user_dir_path,
 		JailedUserHomePath: user_home_path,
 		IsReboot: false,
 	}
-	compilation_info.invokeProcessCloner(ctx.basePath)
+	compilation_info.invokeProcessCloner(filepath.Join(ctx.basePath, "bin"))
 
 
 	//
@@ -677,7 +718,7 @@ func (ctx *Context) build2(
 		JailedUserHomePath: user_home_path,
 		IsReboot: true,
 	}
-	linking_info.invokeProcessCloner(ctx.basePath)
+	linking_info.invokeProcessCloner(filepath.Join(ctx.basePath, "bin"))
 }
 
 
@@ -741,12 +782,15 @@ type ResourceLimit struct {
 	FSize	uint64
 }
 
-func execc(rl *ResourceLimit) error {
+func (p *BridgePipes) execc(rl *ResourceLimit, command string, args []string, envs map[string]string) error {
+
 	pid, err := fork()
 	if err != nil {
+		return err;
 	}
 	if pid == 0 {
 		// child process
+		defer os.Exit(-1)
 
 		//
 		setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
@@ -755,21 +799,101 @@ func execc(rl *ResourceLimit) error {
 		setLimit(C.RLIMIT_MEMLOCK, 1024)	// Process can lock 1024 Bytes by mlock(2)
 
 		setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)
-		setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes
+		setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes [be careful!]
 		setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only 512 KBytes
 
-		panic(fmt.Sprintf("$$$$$$$$$ %d", C.RLIMIT_NOFILE))
-		panic("unreachable")
+		// redirec stdout
+		if err := syscall.Close(p.Stdout.ReadFd); err != nil { panic(err) }
+		if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
+		if err := syscall.Close(p.Stdout.WriteFd); err != nil { panic(err) }
+		// redirec stderr
+		if err := syscall.Close(p.Stderr.ReadFd); err != nil { panic(err) }
+		if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
+		if err := syscall.Close(p.Stderr.WriteFd); err != nil { panic(err) }
+
+		print("foooooooooooooooooo")
+
+		filepath.Walk("/bin", func (path string, info os.FileInfo, err error) error {
+			if err != nil {
+				print(err.Error())
+				return err
+			}
+			println(path)
+			return nil
+		})
+
+		s, err := os.Getwd()
+		if err != nil {
+			log.Print("ababa" + err.Error())
+		} else {
+			log.Print("cwd : " + s)
+		}
+
+		// set PATH env
+		if path, ok := envs["PATH"]; ok {
+			log.Print(path)
+			if err := os.Setenv("PATH", path); err != nil {
+				log.Fatal(err)
+			}
+		}
+
+		//
+		exec_path, err := exec.LookPath(command)
+		if err != nil {
+			log.Fatal(err)
+		}
+		// TODO: strin
+
+
+
+		print(command)
+		print(exec_path)
+
+		//
+		var env_list []string
+		for k, v := range envs {
+			env_list = append(env_list, k + "=" + v)
+		}
+
+		err = syscall.Exec(exec_path, append([]string{command}, args...), env_list);
+		print("unreachable : " + err.Error())
+		return nil
+
+	} else {
+		// parent process
+		syscall.Close(p.Stdout.WriteFd)
+		syscall.Close(p.Stderr.WriteFd)
+
+		//
+		process, err := os.FindProcess(pid)
+		if err != nil {
+			return err;
+		}
+
+		// parent process
+		wait_pid_chan := make(chan *os.ProcessState)
+		go func() {
+			ps, _ := process.Wait()
+			wait_pid_chan <- ps
+		}()
+
+		select {
+		case ps := <-wait_pid_chan:
+			_ = ps
+
+		case <-time.After(time.Duration(rl.CPU * 2) * time.Second):
+			// timeout(e.g. process uses sleep a lot)
+		}
+
+
+		return nil
 	}
-
-	// parent process
-
-	return nil
 }
 
 
 
-func (e *ExecInstruction) Compile() {
+func (b *BrigdeInfo) Compile() {
+	e := b.Instruction
 	limit := &ResourceLimit{
 		CPU: e.Dataset.CpuTimeLimit,		// CPU can be used only cpu_limit_time(sec)
 		AS: e.Dataset.MemoryBytesLimit,		// Memory can be used only memory_limit_bytes
@@ -777,5 +901,5 @@ func (e *ExecInstruction) Compile() {
 	}
 
 
-	execc(limit)
+	b.Pipes.execc(limit, "ls", []string{"-la"}, map[string]string{"PATH": "/bin"})
 }

@@ -69,7 +69,12 @@ func TestReassignTarget(t *testing.T) {
 		return err
 	})
 
-	user_dir_path, _, err := ctx.reassignTarget(base_name, group_id, func(s string) (string, error) {return "", nil})
+	user_dir_path, _, err := ctx.reassignTarget(
+		base_name,
+		group_id,
+		func(s string) (string, error) {
+			return "", nil
+		})
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -102,7 +107,12 @@ func TestReassignTarget2(t *testing.T) {
 		return err
 	})
 
-	user_dir_path, _, err := ctx.reassignTarget(base_name, group_id, func(s string) (string, error) {return "", nil})
+	user_dir_path, _, err := ctx.reassignTarget(
+		base_name,
+		group_id,
+		func(s string) (string, error) {
+			return "", nil
+		})
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -172,7 +182,7 @@ func TestCreateInput(t *testing.T) {
 
 func TestinvokeProcessClonerBase(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	err := invokeProcessClonerBase(gopath, "process_cloner", nil)
+	err := invokeProcessClonerBase(filepath.Join(gopath, "bin"), "process_cloner", nil)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -187,6 +197,28 @@ func TestBootStrap(t *testing.T) {
 		return
 	}
 }
+
+/*
+func TestExec(t *testing.T) {
+	limit := &ResourceLimit{
+		CPU: 10,		// CPU can be used only cpu_limit_time(sec)
+		AS: 1 * 1024 * 1024 * 1024,		// Memory can be used only memory_limit_bytes
+		FSize: 5 * 1024 * 1024,				// Process can writes a file only 5 MBytes
+	}
+
+
+	err := execc(limit, "ls", []string{}, map[string]string{"PATH": "/bin"})
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+
+	t.Fatalf("ababa")
+}
+
+*/
+
+
+
 
 func TestBuild(t *testing.T) {
 	gopath := os.Getenv("GOPATH")

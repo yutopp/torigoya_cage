@@ -48,8 +48,8 @@ func IntoJail(
 	jail_home				string,
 	only_chroot				bool,
 ) (err error) {
-    log.Printf("chroot_root_full_path: %s\n", chroot_root_full_path);
-    log.Printf("jail_home: %s\n", jail_home);
+    log.Printf("IntoJail::chroot_root_full_path: %s\n", chroot_root_full_path);
+    log.Printf("IntoJail::jail_home: %s\n", jail_home);
 
 	expectRoot()
 
@@ -162,6 +162,8 @@ func IntoJail(
 	if err := os.Chdir(jail_home); err != nil {
 		return errors.New(fmt.Sprintf("failed to chdir -> %s (%s)", jail_home, err))
 	}
+
+	log.Printf("<- IntoJail");
 
 	return nil
 }
