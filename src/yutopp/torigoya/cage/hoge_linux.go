@@ -802,32 +802,16 @@ func (p *BridgePipes) execc(rl *ResourceLimit, command string, args []string, en
 		setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes [be careful!]
 		setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only 512 KBytes
 
-		// redirec stdout
+		// TODO: stdin
+
+		// redirect stdout
 		if err := syscall.Close(p.Stdout.ReadFd); err != nil { panic(err) }
 		if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
 		if err := syscall.Close(p.Stdout.WriteFd); err != nil { panic(err) }
-		// redirec stderr
+		// redirect stderr
 		if err := syscall.Close(p.Stderr.ReadFd); err != nil { panic(err) }
 		if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
 		if err := syscall.Close(p.Stderr.WriteFd); err != nil { panic(err) }
-
-		print("foooooooooooooooooo")
-
-		filepath.Walk("/bin", func (path string, info os.FileInfo, err error) error {
-			if err != nil {
-				print(err.Error())
-				return err
-			}
-			println(path)
-			return nil
-		})
-
-		s, err := os.Getwd()
-		if err != nil {
-			log.Print("ababa" + err.Error())
-		} else {
-			log.Print("cwd : " + s)
-		}
 
 		// set PATH env
 		if path, ok := envs["PATH"]; ok {
@@ -842,12 +826,6 @@ func (p *BridgePipes) execc(rl *ResourceLimit, command string, args []string, en
 		if err != nil {
 			log.Fatal(err)
 		}
-		// TODO: strin
-
-
-
-		print(command)
-		print(exec_path)
 
 		//
 		var env_list []string
@@ -856,11 +834,13 @@ func (p *BridgePipes) execc(rl *ResourceLimit, command string, args []string, en
 		}
 
 		err = syscall.Exec(exec_path, append([]string{command}, args...), env_list);
-		print("unreachable : " + err.Error())
+		log.Fatal("unreachable : " + err.Error())
 		return nil
 
 	} else {
 		// parent process
+
+		//
 		syscall.Close(p.Stdout.WriteFd)
 		syscall.Close(p.Stderr.WriteFd)
 
@@ -879,7 +859,13 @@ func (p *BridgePipes) execc(rl *ResourceLimit, command string, args []string, en
 
 		select {
 		case ps := <-wait_pid_chan:
-			_ = ps
+			usage, ok := ps.SysUsage().(*syscall.Rusage)
+			if !ok {
+				log.Fatal("akann")
+			}
+			fmt.Printf("%v", usage)
+
+			// usage.Maxrss -> Amount of memory usage (KB)
 
 		case <-time.After(time.Duration(rl.CPU * 2) * time.Second):
 			// timeout(e.g. process uses sleep a lot)
@@ -901,5 +887,5 @@ func (b *BrigdeInfo) Compile() {
 	}
 
 
-	b.Pipes.execc(limit, "ls", []string{"-la"}, map[string]string{"PATH": "/bin"})
+	b.Pipes.execc(limit, "ls", []string{"-la", "/"}, map[string]string{"PATH": "/bin"})
 }

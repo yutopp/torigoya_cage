@@ -16,88 +16,77 @@ import (
 func TestA(t *testing.T) {
 	file := `
 ---
-version: '3.4'
+version: HEAD-2014.4.9.e912167e7ecf
 is_build_required: true
-is_link_independent: true
+is_link_independent: false
 source:
-  file: prog
-  extension: cpp
+  file: Prog
+  extension: java
 compile:
-  file: prog
-  extension: o
-  command: clang++
+  file: Prog
+  extension: class
+  command: javac
   env:
-    PATH: /usr/local/torigoya/clang-3.4/bin:/usr/bin
-    CPATH: /usr/local/torigoya/libc++-trunk/include/c++/v1
+    PATH: "/usr/local/torigoya/java9-trunk/bin:/usr/bin"
   allowed_command_line:
-    -std=:
-      default:
-      - c++11
-      select:
-      - c++1y
-      - gnu++1y
-      - c++11
-      - gnu++11
-      - c++98
-      - gnu++98
-    -ftemplate-depth=:
-      select:
-      - '512'
-      - '1024'
-      - '2048'
-      - '4096'
-    -O:
-      default:
-      - '2'
-      select:
-      - '0'
-      - '1'
-      - '2'
-      - '3'
-    -W:
-      default:
-      - all
-      - extra
-      select:
-      - all
-      - extra
-    -E:
-    -P:
-    -I:
-      select:
-      - /usr/local/torigoya/boost-1.55.0/include
-      - /usr/local/torigoya/sprout-trunk/include
-      - /usr/local/torigoya/boost-1.54.0/include
   fixed_command_line:
-  - ['-c ', 'prog.cpp']
-  - ['-o ', 'prog.o']
-link:
-  file: prog
-  extension: out
-  command: clang++
-  env:
-    PATH: /usr/local/torigoya/clang-3.4/bin:/usr/bin
-    LD_LIBRARY_PATH: /usr/local/torigoya/libc++-trunk/lib
-    CPATH: /usr/local/torigoya/libc++-trunk/include/c++/v1
-  fixed_command_line:
-  - [' ', 'prog.o']
-  - ['-o ', 'prog.out']
-  - ['-stdlib=', 'libc++']
-  - ['-L', '/usr/local/torigoya/libc++-trunk/lib']
-  - ['-l', 'pthread']
+  - - " "
+    - Prog.java
+  - - "-J-Xms"
+    - 64m
+  - - "-J-Xmx"
+    - 128m
+  - - "-J-Xss"
+    - 512k
+  - - "-J-XX:CompressedClassSpaceSize="
+    - 32M
+  - - "-J-XX:MaxMetaspaceSize="
+    - 128M
+  - - "-J-XX:MetaspaceSize="
+    - 64M
 run:
-  command: ./prog.out
+  command: java
   env:
-    LD_LIBRARY_PATH: /usr/local/torigoya/libc++-trunk/lib
+    PATH: "/usr/local/torigoya/java9-trunk/bin:/usr/bin"
   allowed_command_line:
   fixed_command_line:
+  - - "-Xms"
+    - 64m
+  - - "-Xmx"
+    - 128m
+  - - "-Xss"
+    - 512k
+  - - "-XX:CompressedClassSpaceSize="
+    - 32M
+  - - "-XX:MaxMetaspaceSize="
+    - 128M
+  - - "-XX:MetaspaceSize="
+    - 64M
+  - - " "
+    - Prog
 `
 
 	profile, err := MakeProcProfile([]byte(file))
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		t.Fatalf("error: %v", err)
 		return
 	}
-	_ = profile
-	// log.Fatalf("--- t:\n%v\n\n", profile)
+
+	if profile.Version != "HEAD-2014.4.9.e912167e7ecf" {
+		t.Fatalf("profile.Version should be HEAD-2014.4.9.e912167e7ecf(but %v)", profile.Version)
+	}
+
+
+	if profile.IsBuildRequired != true {
+		t.Fatalf("profile.IsBuildRequired should be true(but %v)", profile.IsBuildRequired)
+	}
+
+
+	if profile.IsLinkIndependent != false {
+		t.Fatalf("profile.IsLinkIndependent should be false(but %v)", profile.IsLinkIndependent)
+	}
+
+
+	log.Fatalf("--- t:\n%v\n\n", profile)
+
 }
