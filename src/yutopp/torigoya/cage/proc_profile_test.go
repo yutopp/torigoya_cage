@@ -10,7 +10,7 @@ package torigoya
 
 import (
 	"testing"
-	"log"
+	_ "log"
 )
 
 func TestA(t *testing.T) {
@@ -87,6 +87,5 @@ run:
 	}
 
 
-	log.Fatalf("--- t:\n%v\n\n", profile)
-
+	//log.Fatalf("--- t:\n%v\n\n", profile)
 }

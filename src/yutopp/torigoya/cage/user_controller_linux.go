@@ -20,10 +20,11 @@ import(
 
 
 func CreateUser(user_name string) (int, int, error) {
+	println("==> " + user_name)
 	// create user
 	user_craete_command := exec.Command("useradd", "--no-create-home", user_name)
 	if err := user_craete_command.Run(); err != nil {
-		return 0, 0, err
+		return 0, 0, errors.New("Failed to useradd : " + err.Error())
 	}
 
 	// get uid/gid
@@ -56,11 +57,21 @@ func DeleteUser(user_name string) error {
 }
 
 func CreateAnonUser() (string, int, int, error) {
-	user_name, err := randutil.AlphaString(24)
+	user_name, err := makeRandomUsername()
 	if err != nil {
 		return "", 0, 0, err
 	}
 
 	uid, gid, err := CreateUser(user_name)
 	return user_name, uid, gid, err
+}
+
+// ([a-z_][a-z0-9_]{0,30})
+func makeRandomUsername() (string, error) {
+	piece, err := randutil.AlphaString(28)
+	if err != nil {
+		return "", err
+	}
+
+	return strings.ToLower("_" + piece), nil
 }

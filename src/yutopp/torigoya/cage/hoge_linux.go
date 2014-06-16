@@ -586,6 +586,7 @@ func sandboxBootstrap(
 
 	user_name, uid, gid, err := CreateAnonUser()
 	if err != nil {
+		log.Printf("Couldn't create anon user")
 		return err
 	}
 	defer func() {
