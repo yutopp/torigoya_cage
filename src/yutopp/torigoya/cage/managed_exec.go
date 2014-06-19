@@ -57,6 +57,20 @@ func DecodeExecuteResult(base []byte) (*ExecutedResult, error) {
 	return bm, nil
 }
 
+func (bm *ExecutedResult) sendTo(p *BridgePipes) error {
+	buf, err := bm.Encode()
+	if err != nil { return err }
+
+	syscall.Close(p.Result.ReadFd)
+
+	n, err := syscall.Write(p.Result.WriteFd, buf)
+	if err != nil { return errors.New(fmt.Sprintf("sendTo:: %v", err))  }
+	if n != len(buf) { return errors.New(fmt.Sprintf("sendTo:: couldn't write bytes (%d)", n)) }
+
+	syscall.Close(p.Result.WriteFd)
+
+	return nil
+}
 
 //
 type ResourceLimit struct {
@@ -76,86 +90,21 @@ func managedExec(
 	p *BridgePipes,
 	args []string,
 	envs map[string]string,
-) error {
+) (*ExecutedResult, error) {
 	// make a pipe for error reports
 	error_pipe, err := makePipe()
-	if err != nil { return err }
+	if err != nil { return nil, err }
 	defer error_pipe.Close()
 
 	// fork process!
 	pid, err := fork()
 	if err != nil {
-		return err;
+		return nil, err;
 	}
 	if pid == 0 {
 		// child process
-
-		// if called this function, child process is failed to execute
-		defer func() {
-			// mark failed result
-			syscall.Close(error_pipe.ReadFd)
-			syscall.Write(error_pipe.WriteFd, errorSequence)		// write error sequence
-			if r := recover(); r != nil {
-				if err, ok := r.(error); ok {
-					syscall.Write(error_pipe.WriteFd, []byte(err.Error()))	// write panic sentence
-				}
-			}
-			syscall.Close(error_pipe.WriteFd)
-
-			// exit
-			os.Exit(-1)
-		}()
-
-		//
-		setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
-		setLimit(C.RLIMIT_NOFILE, 1024)		// Process can open 1024 files
-		setLimit(C.RLIMIT_NPROC, 20)		// Process can create 20 processes
-		setLimit(C.RLIMIT_MEMLOCK, 1024)	// Process can lock 1024 Bytes by mlock(2)
-
-		setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)
-		setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes [be careful!]
-		setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only 512 KBytes
-
-		// TODO: stdin
-
-		// redirect stdout
-		if err := syscall.Close(p.Stdout.ReadFd); err != nil { panic(err) }
-		if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
-		if err := syscall.Close(p.Stdout.WriteFd); err != nil { panic(err) }
-
-		// redirect stderr
-		if err := syscall.Close(p.Stderr.ReadFd); err != nil { panic(err) }
-		if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
-		if err := syscall.Close(p.Stderr.WriteFd); err != nil { panic(err) }
-
-		// set PATH env
-		if path, ok := envs["PATH"]; ok {
-			if err := os.Setenv("PATH", path); err != nil {
-				panic(err)
-			}
-		}
-
-		//
-		if len(args) < 1 {
-			panic(errors.New("args must contain at least one element"))
-		}
-		command := args[0]	//
-		exec_path, err := exec.LookPath(command)
-		if err != nil {
-			panic(err)
-		}
-
-		//
-		var env_list []string
-		for k, v := range envs {
-			env_list = append(env_list, k + "=" + v)
-		}
-
-		// exec!!
-		err = syscall.Exec(exec_path, args, env_list);
-
-		panic(errors.New(fmt.Sprintf("unreachable : " + err.Error())))
-		return nil
+		child(rl, p, *error_pipe, args, envs)
+		return nil, nil
 
 	} else {
 		// parent process
@@ -170,7 +119,7 @@ func managedExec(
 		//
 		process, err := os.FindProcess(pid)
 		if err != nil {
-			return err;
+			return nil, err;
 		}
 
 		// parent process
@@ -181,16 +130,13 @@ func managedExec(
 		}()
 
 		//
-		var executed_result *ExecutedResult
-
-		//
 		select {
 		case ps := <-wait_pid_chan:
 			usage, ok := ps.SysUsage().(*syscall.Rusage)
 			if !ok {
 				log.Fatal("akann")
 			}
-			fmt.Printf("%v", usage)
+			fmt.Printf("%v\n", usage)
 
 			// usage.Maxrss -> Amount of memory usage (KB)
 
@@ -199,9 +145,9 @@ func managedExec(
 			error_len, _ := syscall.Read(error_pipe.ReadFd, error_buf)
 			if error_len < len(errorSequence) {
 				// execution was succeeded
-				executed_result = &ExecutedResult{
+				return &ExecutedResult{
 					IsSystemFailed: false,
-				}
+				}, nil
 
 			} else {
 				// execution was failed
@@ -216,39 +162,98 @@ func managedExec(
 						error_log += string(error_buf[:size])
 					}
 
-					// set result
-					executed_result = &ExecutedResult{
-						IsSystemFailed: true,
-						SystemErrorMessage: error_log,
-					}
+					return nil, errors.New(error_log)
 
 				} else {
 					// invalid error byte sequence
-					return errors.New("invalid error byte sequence")
+					return nil, errors.New("invalid error byte sequence")
 				}
 			}
 
 		case <-time.After(time.Duration(rl.CPU * 2) * time.Second):
 			// timeout(e.g. when process uses sleep a lot)
-			executed_result = &ExecutedResult{
-				IsSystemFailed: true,
-				SystemErrorMessage: "ababa",
-			}
+			return nil, errors.New("TLE")
 		}
-
-		//
-		fmt.Printf("&&& %v\n", executed_result)
-
-		//
-		syscall.Close(p.Result.ReadFd)
-		buf, err := executed_result.Encode()
-		if err != nil { return err }
-		syscall.Write(p.Result.WriteFd, buf)
-		syscall.Close(p.Result.WriteFd)
-
-		return nil
 	}
 }
+
+
+func child(
+	rl *ResourceLimit,
+	p *BridgePipes,
+	error_pipe Pipe,
+	args []string,
+	envs map[string]string,
+) {
+	// if called this function, child process is failed to execute
+	defer func() {
+		// mark failed result
+		syscall.Close(error_pipe.ReadFd)
+		syscall.Write(error_pipe.WriteFd, errorSequence)		// write error sequence
+		if r := recover(); r != nil {
+			if err, ok := r.(error); ok {
+				syscall.Write(error_pipe.WriteFd, []byte(err.Error()))	// write panic sentence
+			}
+		}
+		syscall.Close(error_pipe.WriteFd)
+
+		// exit
+		os.Exit(-1)
+	}()
+
+	print("aaaaaaaa ============= child")
+
+	//
+	setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
+	setLimit(C.RLIMIT_NOFILE, 1024)		// Process can open 1024 files
+	setLimit(C.RLIMIT_NPROC, 20)		// Process can create 20 processes
+	setLimit(C.RLIMIT_MEMLOCK, 1024)	// Process can lock 1024 Bytes by mlock(2)
+
+	setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)
+	setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes [be careful!]
+	setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only 512 KBytes
+
+	// TODO: stdin
+
+	// redirect stdout
+	if err := syscall.Close(p.Stdout.ReadFd); err != nil { panic(err) }
+	if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
+	if err := syscall.Close(p.Stdout.WriteFd); err != nil { panic(err) }
+
+	// redirect stderr
+	if err := syscall.Close(p.Stderr.ReadFd); err != nil { panic(err) }
+	if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
+	if err := syscall.Close(p.Stderr.WriteFd); err != nil { panic(err) }
+
+	// set PATH env
+	if path, ok := envs["PATH"]; ok {
+		if err := os.Setenv("PATH", path); err != nil {
+			panic(err)
+		}
+	}
+
+	//
+	if len(args) < 1 {
+		panic(errors.New("args must contain at least one element"))
+	}
+	command := args[0]	//
+	exec_path, err := exec.LookPath(command)
+	if err != nil {
+		panic(err)
+	}
+
+	//
+	var env_list []string
+	for k, v := range envs {
+		env_list = append(env_list, k + "=" + v)
+	}
+
+	// exec!!
+	err = syscall.Exec(exec_path, args, env_list);
+
+	panic(errors.New(fmt.Sprintf("unreachable : " + err.Error())))
+}
+
 
 func fork() (int, error) {
 	syscall.ForkLock.Lock()
@@ -259,6 +264,7 @@ func fork() (int, error) {
 	}
 	return int(pid), nil
 }
+
 
 func setLimit(resource int, value uint64) {
 	//

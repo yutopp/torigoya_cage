@@ -28,6 +28,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
+	defer bm.Pipes.Close()
 
 	// !!! ===================
 	// Drop privilege

@@ -16,7 +16,6 @@ import(
 	"strconv"
 	"time"
 	"errors"
-	"io"
 	"os"
 	"os/user"
 	"os/exec"
@@ -127,10 +126,13 @@ func invokeProcessClonerBase(
 
 	// update pipe data to message
 	bm.Pipes = &BridgePipes{
-		Stdout: stdout_pipe,
-		Stderr: stderr_pipe,
-		Result: result_pipe,
+		Stdout: stdout_pipe.CopyForClone(),
+		Stderr: stderr_pipe.CopyForClone(),
+		Result: result_pipe.CopyForClone(),
 	}
+	//stdout_pipe.CloseWrite()
+	//stderr_pipe.CloseWrite()
+	//result_pipe.CloseWrite()
 
 	//
 	content_string, err := bm.Encode()
@@ -167,56 +169,56 @@ func invokeProcessClonerBase(
 
 	// read stdout/stderr
 	stdout_c := make(chan error)
-	go readPipe(stdout_pipe.ReadFd, stdout_c)
+	go readPipeAsync(stdout_pipe.ReadFd, stdout_c)
 	stderr_c := make(chan error)
-	go readPipe(stderr_pipe.ReadFd, stderr_c)
+	go readPipeAsync(stderr_pipe.ReadFd, stderr_c)
 
 	// wait for finishing subprocess
 	select {
 	case err := <-process_wait_c:
 		// subprocess has been finished
-		log.Println("MYAN")
+		log.Printf("MYAN %v", err)
 		if err != nil {
 			return err
 		}
 
-		log.Printf("?? %d", cmd.ProcessState.Success())
+		log.Printf("?? %v", cmd.ProcessState.Success())
 		if !cmd.ProcessState.Success() {
 			return errors.New("Process finished with failed state")
 		}
 
-	case <-time.After(300 * time.Second):
-		// will blocking( wait for response at least 300 seconds )
+		result_pipe.CloseWrite()
+		result_buf, _ := readPipe(result_pipe.ReadFd)
+		result, err := DecodeExecuteResult(result_buf)
+		log.Printf("??RESULT!!!!!!! %v / %v", result, err)
 
+
+	case <-time.After(500 * time.Second):
+		// TODO: fix
+		// will blocking( wait for response at least 500 seconds )
 		log.Println("TIMEOUT")
 	}
 	stdout_pipe.Close()
 	stderr_pipe.Close()
+	result_pipe.Close()
 
 	return nil
 }
 
-func readPipe(fd int, cs chan<- error) {
+func readPipeAsync(fd int, cs chan<- error) {
 	buffer := make([]byte, 1024)
 	defer close(cs)
 
 	for {
 		size, err := syscall.Read(fd, buffer)
 		if err != nil {
-			if err == io.EOF {
-				log.Printf("= EOF!!")
-				break;
-			} else {
-				log.Printf("= MOUDAME!")
-			}
-
 			cs <- err
-			return;
+			return
 		}
 
 		if size != 0 {
 			log.Printf("= %d ==> %d", fd, size)
-			log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[0:size]))
+			log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[:size]))
 		}
 		_ = size
 	}
@@ -225,6 +227,28 @@ func readPipe(fd int, cs chan<- error) {
 }
 
 
+func readPipe(fd int) (result []byte, err error) {
+	buffer := make([]byte, 1024)
+
+	for {
+		log.Printf("= loop %d <><>", fd)
+		size, err := syscall.Read(fd, buffer)
+		log.Printf("= loop %d ==> %d", fd, size)
+		if err != nil {
+			break
+		}
+
+		if size != 0 {
+			result = append(result, buffer[:size]...)
+			log.Printf("= %d ==> %d", fd, size)
+			log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[0:size]))
+		} else {
+			break
+		}
+	}
+
+	return
+}
 
 
 
@@ -315,6 +339,12 @@ type BridgePipes struct {
 	Stdout, Stderr, Result	*Pipe
 }
 
+func (bp *BridgePipes) Close() {
+	bp.Stdout.Close()
+	bp.Stderr.Close()
+	bp.Result.Close()
+}
+
 
 //
 type BridgeMessage struct {
@@ -355,7 +385,7 @@ func DecodeBridgeMessage(base string) (*BridgeMessage, error) {
 func (bm *BridgeMessage) Exec() error {
 	m := bm.Message
 
-	return func() error {
+	exec_result, err := func() (*ExecutedResult, error) {
 		switch m.Mode {
 		case CompileMode:
 			return bm.compile()
@@ -364,13 +394,27 @@ func (bm *BridgeMessage) Exec() error {
 		case RunMode:
 			return bm.run()
 		default:
-			return errors.New("Invalid mode")
+			return nil, errors.New("Exec:: Invalid mode")
 		}
 	}()
+	if err != nil {
+		exec_result = &ExecutedResult{
+			IsSystemFailed: true,
+			SystemErrorMessage: err.Error(),
+		}
+	}
+	if exec_result == nil {
+		exec_result = &ExecutedResult{
+			IsSystemFailed: true,
+			SystemErrorMessage: "Result was not generated",
+		}
+	}
+
+	return exec_result.sendTo(bm.Pipes)
 }
 
 //
-func (bm *BridgeMessage) compile() error {
+func (bm *BridgeMessage) compile() (*ExecutedResult, error) {
 	exec_message := bm.Message
 
 	proc_profile := exec_message.Profile
@@ -383,7 +427,7 @@ func (bm *BridgeMessage) compile() error {
 		exec_setting.StructuredCommand,
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	//
@@ -395,17 +439,15 @@ func (bm *BridgeMessage) compile() error {
 
 	_ = stdin_file_path
 
-	managedExec(res_limit, bm.Pipes, args, map[string]string{"PATH": "/bin"})
-
-	return nil
+	return managedExec(res_limit, bm.Pipes, args, map[string]string{"PATH": "/bin"})
 }
 
-func (bm *BridgeMessage) link() error {
-	return nil
+func (bm *BridgeMessage) link() (*ExecutedResult, error) {
+	return nil, nil
 }
 
-func (bm *BridgeMessage) run() error {
-	return nil
+func (bm *BridgeMessage) run() (*ExecutedResult, error) {
+	return nil, nil
 }
 
 

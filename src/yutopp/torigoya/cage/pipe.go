@@ -14,6 +14,7 @@ import(
 	"syscall"
 )
 
+
 // MEMO: maybe, closed flag should not be copied...
 type Pipe struct {
 	ReadFd, WriteFd				int
@@ -27,6 +28,10 @@ func makePipe() (*Pipe, error) {
 	}
 
 	return &Pipe{pipe[0], pipe[1], false, false}, nil
+}
+
+func (p *Pipe) CopyForClone() *Pipe {
+	return &Pipe{p.ReadFd, p.WriteFd, false, false}
 }
 
 func (p *Pipe) Close() {

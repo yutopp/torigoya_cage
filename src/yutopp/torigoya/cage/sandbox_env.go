@@ -6,6 +6,8 @@
 // http://www.boost.org/LICENSE_1_0.txt)
 //
 
+// +build linux
+
 package torigoya
 
 import(
