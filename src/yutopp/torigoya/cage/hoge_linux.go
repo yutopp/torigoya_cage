@@ -10,9 +10,6 @@
 
 package torigoya
 
-// #include <sys/resource.h>
-import "C"
-
 import(
 	"fmt"
 	"log"
@@ -29,7 +26,6 @@ import(
 	"encoding/base64"
 	"github.com/ugorji/go/codec"
 )
-
 
 type Context struct {
 	basePath		string
@@ -93,314 +89,17 @@ func expectRoot() {
 	}
 }
 
-func fileExists(filename string) bool {
-    _, err := os.Stat(filename)
-    return err == nil
-}
-
-
-
-func (ctx *Context) makeUserDirName(base_name string) string {
-	return filepath.Join(ctx.sandboxDir, base_name)
-}
-
-
-//
-type createTargetCallback func(*os.File) (error)
-
-//
-func (ctx *Context) createTarget(
-	base_name string,
-	managed_group_id int,
-	source_file_name string,
-	callback createTargetCallback,
-) (string, error) {
-	source_full_paths, err := ctx.createMultipleTarget(
-		base_name,
-		managed_group_id,
-		[]string{source_file_name},
-		[]createTargetCallback{callback},
-	)
-	if err != nil {
-		return "", err
-	}
-	if len(source_full_paths) != 1 {
-		return "", errors.New("???")
-	}
-
-	return source_full_paths[0], err
-}
-
-//
-func (ctx *Context) createMultipleTarget(
-	base_name string,
-	managed_group_id int,
-	source_file_names []string,
-	callbacks []createTargetCallback,
-) (source_full_paths []string, err error) {
-	log.Println("called SekiseiRunnerNodeServer::create_target")
-
-	//
-	if len(source_file_names) != len(callbacks) {
-		return nil, errors.New("Size of source_file_names and callbacks are different")
-	}
-
-	//
-    expectRoot()
-
-	fmt.Printf("Euid -> %d\n", os.Geteuid())
-
-	// In posix, Uid only contains numbers
-	host_user_id, _ := strconv.Atoi(ctx.hostUser.Uid)
-	fmt.Printf("host uid: %s\n", ctx.hostUser.Uid)
-
-	//
-	if !fileExists(ctx.sandboxDir) {
-		panic(fmt.Sprintf("directory %s is not existed", ctx.sandboxDir))
-	}
-
-	// ========================================
-	//// create user directory
-
-	//
-	user_dir_path := ctx.makeUserDirName(base_name)
-
-	//
-	if fileExists(user_dir_path) {
-		log.Printf("user directory %s is already existed, so remove them\n", user_dir_path)
-		err := os.RemoveAll(user_dir_path)
-		if err != nil {
-			return nil, errors.New(fmt.Sprintf("Couldn't remove directory %s (%s)", user_dir_path, err))
-		}
-	}
-
-	//
-	if err := os.Mkdir(user_dir_path, os.ModeDir); err != nil {
-		return nil, errors.New(fmt.Sprintf("Couldn't create directory %s (%s)", user_dir_path, err))
-	}
-	// host_user_id:host_user_id // r-x/r-x/---
-	if err := guardPath(user_dir_path, host_user_id, managed_group_id, 0550); err != nil {
-		return nil, err
-	}
-
-	// ========================================
-	//// create user HOME directory
-
-	// create /home
-	user_home_base_path := filepath.Join(user_dir_path, ctx.homeDir)
-	if err := os.Mkdir(user_home_base_path, os.ModeDir); err != nil {
-		return nil, errors.New(fmt.Sprintf("Couldn't create directory %s (%s)", user_home_base_path, err))
-	}
-	// host_user_id:managed_group_id // r-x/---/---
-	if err := guardPath(user_home_base_path, host_user_id, managed_group_id, 0500); err != nil {
-		return nil, err
-	}
-
-	// create /home/torigoya
-	user_home_path := filepath.Join(user_dir_path, ctx.jailedUserDir)
-	if err := os.Mkdir(user_home_path, os.ModeDir); err != nil {
-		return nil, errors.New(fmt.Sprintf("Couldn't create directory %s (%s)", user_home_path, err))
-	}
-	// host_user_id:managed_group_id // rwx/r-x/---
-	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0750); err != nil {
-		return nil, err
-	}
-
-	// ========================================
-	//// make source file
-	source_full_paths = make([]string, len(source_file_names))
-	for index, source_file_name := range source_file_names {
-		source_full_path := filepath.Join(user_home_path, source_file_name)
-		f, err := os.OpenFile(source_full_path, os.O_WRONLY|os.O_CREATE, 0600)
-		if err != nil {
-			return nil, err
-		}
-		defer func() {
-			f.Close()
-			log.Printf("-> %s\n", source_full_path)
-			// host_user_id:managed_group_id // r--/---/---
-			err = guardPath(source_full_path, host_user_id, managed_group_id, 0400)
-		}()
-
-		//
-		err = callbacks[index](f)
-
-		//
-		source_full_paths[index] = source_full_path
-	}
-
-	return source_full_paths, err
-}
-
-
-//
-type reassignTargetCallback func(string) (string, error)
-
-//
-func (ctx *Context) reassignTarget(
-	base_name string,
-	managed_group_id int,
-	callback reassignTargetCallback,
-) (user_dir_path string, input_path string, err error) {
-	log.Println("called SekiseiRunnerNodeServer::reassign_target")
-
-    expectRoot()
-
-	// In posix, Uid only contains numbers
-	host_user_id, _ := strconv.Atoi(ctx.hostUser.Uid)
-	fmt.Printf("host uid: %s\n", ctx.hostUser.Uid)
-
-	//
-	user_dir_path = ctx.makeUserDirName(base_name)
-
-	// delete directories exclude HOME
-	dirs, err := filepath.Glob(user_dir_path + "/*")
-	if err != nil {
-		return "", "", err
-	}
-	for _, dir := range dirs {
-		rel_dir, err := filepath.Rel(user_dir_path, dir)
-		if err != nil {
-			return "", "", err
-		}
-
-		if rel_dir != ctx.homeDir {
-			err := os.RemoveAll(dir)
-			if err != nil {
-				return "", "", errors.New(fmt.Sprintf("Couldn't remove directory %s (%s)", dir, err))
-			}
-		}
-	}
-
-	// chmod /home // host_user_id:managed_group_id // r-x/r-x/---
-	user_home_base_path := filepath.Join(user_dir_path, ctx.homeDir)
-	if err := guardPath(user_home_base_path, host_user_id, managed_group_id, 0550); err != nil {
-		return "", "", err
-	}
-
-	// chmod /home/torigoya
-	user_home_path := filepath.Join(user_dir_path, ctx.jailedUserDir)
-	// host_user_id:managed_group_id // rwx/---/---
-	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0700); err != nil {
-		return "", "", err
-	}
-
-	// call user block
-	input_path, err = callback(user_dir_path)
-	if err != nil {
-		return "", "", err
-	}
-
-	// host_user_id:managed_group_id // rwx/r-x/---
-	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0750); err != nil {
-		return "", "", err
-	}
-
-	//
-	err = filepath.Walk(user_home_path, func(path string, info os.FileInfo, err error) error {
-		log.Println(path)
-		if err != nil { return err }
-		if err := os.Chown(path, host_user_id, managed_group_id); err != nil {
-			return errors.New(fmt.Sprintf("Couldn't chown %s, %s", path, err.Error()))
-		}
-		return err
-	})
-
-	return user_dir_path, input_path, err
-}
-
-
-func (ctx *Context) createInput(
-	base_dir_path string,
-	managed_group_id int,
-	stdin_name string,
-	stdin_content string,
-) (stdin_full_path string, err error) {
-	log.Println("called SekiseiRunnerNodeServer::createInput")
-
-    expectRoot()
-
-	// In posix, Uid only contains numbers
-	host_user_id, _ := strconv.Atoi(ctx.hostUser.Uid)
-	fmt.Printf("host uid: %s\n", ctx.hostUser.Uid)
-
-	//
-	const inputs_dir_name = "stdin"
-	inputs_dir_path := filepath.Join(base_dir_path, ctx.jailedUserDir, inputs_dir_name)
-
-	//
-	if !fileExists(inputs_dir_path) {
-		err := os.Mkdir(inputs_dir_path, os.ModeDir)
-		if err != nil {
-			panic(fmt.Sprintf("Couldn't create directory %s", inputs_dir_path))
-		}
-	}
-	// host_user_id:managed_group_id // rwx/---/---
-	if err := guardPath(inputs_dir_path, host_user_id, managed_group_id, 0700); err != nil {
-		return "", err
-	}
-
-	//
-	stdin_full_path = filepath.Join(inputs_dir_path, stdin_name)
-	f, err := os.OpenFile(stdin_full_path, os.O_WRONLY|os.O_CREATE, 0600)
-	if err != nil {
-		return "", err
-	}
-	defer func() {
- 		f.Close()
-		// host_user_id:managed_group_id // r--/---/---
-		err = guardPath(stdin_full_path, host_user_id, managed_group_id, 0400)
-	}()
-	if _, err := f.WriteString(stdin_content); err != nil {
-		return "", err
-	}
-
-	// host_user_id:managed_group_id // r-x/---/---
-	if err := guardPath(inputs_dir_path, host_user_id, managed_group_id, 0500); err != nil {
-		return "", err
-	}
-
-	return stdin_full_path, err
-}
-
-
-// if runnable file(a.out, main.py, etc..) exist, return true
-func (ctx *Context) isTargetCached(
-	base_name string,
-	target_name string,
-) bool {
-	expectRoot()
-
-	user_dir_path := ctx.makeUserDirName(base_name)
-	target_path := filepath.Join(user_dir_path, ctx.jailedUserDir, target_name)
-
-	return fileExists(target_path)
-}
-
-
-func guardPath(file_path string, user_id int, group_id int, mode os.FileMode) error {
-	if err := os.Chown(file_path, user_id, group_id); err != nil {
-		return errors.New(fmt.Sprintf("Couldn't chown %s, %s", file_path, err.Error()))
-	}
-	if err := os.Chmod(file_path, mode); err != nil {
-		return errors.New(fmt.Sprintf("Couldn't chmod %s, %s", file_path, err.Error()))
-	}
-
-	return nil
-}
-
-
-func (passing_info *BrigdeInfo) invokeProcessCloner(
+func (bm *BridgeMessage) invokeProcessCloner(
 	cloner_dir		string,
 ) error {
-	return invokeProcessClonerBase(cloner_dir, "process_cloner", passing_info)
+	return invokeProcessClonerBase(cloner_dir, "process_cloner", bm)
 }
 
 //
 func invokeProcessClonerBase(
 	cloner_dir		string,
 	cloner_name		string,
-	passing_info	*BrigdeInfo,
+	bm				*BridgeMessage,
 ) error {
 	cloner_path := filepath.Join(cloner_dir, cloner_name)
 	log.Printf("Cloner path: %s", cloner_path)
@@ -408,8 +107,8 @@ func invokeProcessClonerBase(
 	callback_path := filepath.Join(cloner_dir, "cage.callback")
 
 	// init default value
-	if passing_info == nil {
-		passing_info = &BrigdeInfo{}
+	if bm == nil {
+		bm = &BridgeMessage{}
 	}
 
 	// TODO: close on exec
@@ -426,22 +125,15 @@ func invokeProcessClonerBase(
 	if err != nil { return err }
 	defer result_pipe.Close()
 
-	//
-	passing_info.Pipes = &BridgePipes{
+	// update pipe data to message
+	bm.Pipes = &BridgePipes{
 		Stdout: stdout_pipe,
 		Stderr: stderr_pipe,
 		Result: result_pipe,
 	}
 
 	//
-	content_string, err := func() (string, error) {
-		var msgpack_bytes []byte
-		enc := codec.NewEncoderBytes(&msgpack_bytes, &msgPackHandler)
-		if err := enc.Encode(*passing_info); err != nil {
-			return "", err
-		}
-		return base64.StdEncoding.EncodeToString(msgpack_bytes), nil
-	}()
+	content_string, err := bm.Encode()
 	if err != nil {
 		return err
 	}
@@ -456,6 +148,10 @@ func invokeProcessClonerBase(
 	// debug...
 	cmd.Stdout = os.Stdout
     cmd.Stderr = os.Stderr
+
+	//cmd.Stdout = nil
+    //cmd.Stderr = nil
+
 
 	// Start Process
 	if err := cmd.Start(); err != nil {
@@ -474,7 +170,6 @@ func invokeProcessClonerBase(
 	go readPipe(stdout_pipe.ReadFd, stdout_c)
 	stderr_c := make(chan error)
 	go readPipe(stderr_pipe.ReadFd, stderr_c)
-
 
 	// wait for finishing subprocess
 	select {
@@ -495,19 +190,8 @@ func invokeProcessClonerBase(
 
 		log.Println("TIMEOUT")
 	}
-
-
-	select {
-	case stdout_err := <-stdout_c:
-		_ = stdout_err
-	case <-time.After(1 * time.Second):
-	}
-
-	select {
-	case stderr_err := <-stderr_c:
-		_ = stderr_err
-	case <-time.After(1 * time.Second):
-	}
+	stdout_pipe.Close()
+	stderr_pipe.Close()
 
 	return nil
 }
@@ -522,14 +206,19 @@ func readPipe(fd int, cs chan<- error) {
 			if err == io.EOF {
 				log.Printf("= EOF!!")
 				break;
+			} else {
+				log.Printf("= MOUDAME!")
 			}
 
 			cs <- err
 			return;
 		}
 
-		log.Printf("= %d ==> %d", fd, size)
-		log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer))
+		if size != 0 {
+			log.Printf("= %d ==> %d", fd, size)
+			log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[0:size]))
+		}
+		_ = size
 	}
 
 	cs <- nil
@@ -537,88 +226,17 @@ func readPipe(fd int, cs chan<- error) {
 
 
 
-type Pipe struct {
-	ReadFd, WriteFd		int
-}
-
-func makePipe() (*Pipe, error) {
-	pipe := make([]int, 2)
-	if err := syscall.Pipe(pipe); err != nil {
-		return nil, err
-	}
-
-	return &Pipe{pipe[0], pipe[1]}, nil
-}
-
-func (p *Pipe) Close() {
-	syscall.Close(p.ReadFd)
-	syscall.Close(p.WriteFd)
-}
-
-type BridgePipes struct {
-	Stdout, Stderr, Result	*Pipe
-}
 
 
 
-type JailedUserInfo struct {
-	UserId		int
-	GroupId		int
-}
-
-type BrigdeInfo struct {
-	JailedUser			*JailedUserInfo
-	Instruction			*ExecInstruction
-	ChrootPath			string
-	JailedUserHomePath	string
-	IsReboot			bool
-	Pipes				*BridgePipes
-}
 
 
-var msgPackHandler codec.MsgpackHandle
 
-type sandboxCallback func(jailed_user *JailedUserInfo) error;
-func sandboxBootstrap(
-	callback sandboxCallback,
-) error {
-	expectRoot()
 
-	user_name, uid, gid, err := CreateAnonUser()
-	if err != nil {
-		log.Printf("Couldn't create anon user")
-		return err
-	}
-	defer func() {
-		//
-		killUserProcess(user_name, []string{"HUP", "KILL"})
 
-		//
-		const retry_times = 5
-		succeeded := false
-		for i:=0; i<retry_times; i++ {
-			if err := DeleteUser(user_name); err != nil {
-				log.Printf("Failed to delete user %s / %d times", user_name, i)
-				killUserProcess(user_name, []string{"HUP", "KILL"})
-			} else {
-				succeeded = true
-				break
-			}
-		}
 
-		if !succeeded {
-			// TODO: fix process...
-			log.Printf("!! Failed to delete user %s for ALL", user_name)
-		}
-	}()
 
-	//
-	if callback != nil {
-		err = callback(&JailedUserInfo{uid, gid})
-	}
 
-	return err
-}
 
 
 type ProcTarget struct {
@@ -627,266 +245,278 @@ type ProcTarget struct {
 }
 
 
-
+// For source codes, inputs
 type SourceData struct {
 	Name			string
-	Code			string
+	Data			[]byte
 	IsCompressed	bool
 }
 
-type ExecDataset struct {
-	StdinFilePath		*string
+func convertSourceToContent(
+	sources []SourceData,
+) ([]TextContent, error) {
+	source_contents := make([]TextContent, len(sources))
+
+	//
+	for i, s := range sources {
+		data, err := func() ([]byte, error) {
+			return s.Data, nil
+		}()
+		if err != nil {
+			return nil, err
+		}
+
+		// collect file names
+		source_contents[i] = TextContent{
+			Name: s.Name,
+			Data: data,
+		}
+	}
+
+	return source_contents, nil
+}
+
+
+//
+type ExecutionSetting struct {
 	CommandLine			string
-	StructuredCommand	map[string]string
+	StructuredCommand	[][]string
 	CpuTimeLimit		uint64
 	MemoryBytesLimit	uint64
 }
 
-type ExecInstruction struct {
-	Profile		*ProcProfile
-	Dataset		*ExecDataset
+type BuildInstruction struct {
+	CompileSetting		*ExecutionSetting
+	LinkSetting			*ExecutionSetting
+}
+
+type RunInstruction struct {
+	Inputs				[]struct{ input *SourceData; setting *ExecutionSetting }
 }
 
 
-func (ctx *Context) build(
-	base_name		string,
-	sources			[]SourceData,
-) error {
-	err := sandboxBootstrap(
-		func(jailed_user *JailedUserInfo) error {
-			ctx.build2(base_name, sources, jailed_user)
-			return nil
-		})
+// send this message to sandbox process
+type ExecMessage struct {
+	Profile				*ProcProfile
+	StdinFilePath		*string
+	Setting				*ExecutionSetting
+	Mode				int
+}
 
-	return err
+const (
+	CompileMode = iota
+	LinkMode
+	RunMode
+)
+
+
+//
+type BridgePipes struct {
+	Stdout, Stderr, Result	*Pipe
 }
 
 
-func (ctx *Context) build2(
-	base_name		string,
-	sources			[]SourceData,
-	jailed_user		*JailedUserInfo,
-) {
-	source_names := make([]string, len(sources))
-	callbacks := make([]createTargetCallback, len(sources))
+//
+type BridgeMessage struct {
+	ChrootPath			string
+	JailedUserHomePath	string
+	JailedUser			*JailedUserInfo
+	Pipes				*BridgePipes
+	Message				ExecMessage
+	IsReboot			bool
+}
 
-	for i, s := range sources {
-		//
-		source_names[i] = s.Name
-
-		//
-		callbacks[i] = func(*os.File) (error) {
-			return nil
-		}
+func (bm *BridgeMessage) Encode() (string, error) {
+	var msgpack_bytes []byte
+	enc := codec.NewEncoderBytes(&msgpack_bytes, &msgPackHandler)
+	if err := enc.Encode(*bm); err != nil {
+		return "", err
 	}
+	return base64.StdEncoding.EncodeToString(msgpack_bytes), nil
+}
 
-	//
-	_, err := ctx.createMultipleTarget(base_name, jailed_user.GroupId, source_names, callbacks)
+func DecodeBridgeMessage(base string) (*BridgeMessage, error) {
+	decoded_bytes, err := base64.StdEncoding.DecodeString(base)
 	if err != nil {
+		return nil, err
 	}
 
-	user_dir_path := ctx.makeUserDirName(base_name)
-	user_home_path := ctx.jailedUserDir
-
-	//
-	compilation_info := &BrigdeInfo{
-		JailedUser: jailed_user,
-		Instruction: &ExecInstruction{
-			&ProcProfile{
-			},
-			&ExecDataset{
-				CpuTimeLimit: 10,
-				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-			},
-		},
-		ChrootPath: user_dir_path,
-		JailedUserHomePath: user_home_path,
-		IsReboot: false,
+	bm := &BridgeMessage{}
+	dec := codec.NewDecoderBytes(decoded_bytes, &msgPackHandler)
+	if err := dec.Decode(bm); err != nil {
+		return nil, err
 	}
-	compilation_info.invokeProcessCloner(filepath.Join(ctx.basePath, "bin"))
 
-
-	//
-	linking_info := &BrigdeInfo{
-		JailedUser: jailed_user,
-		Instruction: &ExecInstruction{
-			&ProcProfile{
-			},
-			&ExecDataset{
-			},
-		},
-		ChrootPath: user_dir_path,
-		JailedUserHomePath: user_home_path,
-		IsReboot: true,
-	}
-	linking_info.invokeProcessCloner(filepath.Join(ctx.basePath, "bin"))
+	return bm, nil
 }
 
 
-func (bridge_info *BrigdeInfo) Hoge() error {
-	if bridge_info.JailedUser == nil {
-		return errors.New("Jailed User Info was NOT given")
-	}
+//
+func (bm *BridgeMessage) Exec() error {
+	m := bm.Message
 
-	if err := IntoJail(
-		bridge_info.ChrootPath,
-		bridge_info.JailedUserHomePath,
-		bridge_info.IsReboot,
-	); err != nil {
+	return func() error {
+		switch m.Mode {
+		case CompileMode:
+			return bm.compile()
+		case LinkMode:
+			return bm.link()
+		case RunMode:
+			return bm.run()
+		default:
+			return errors.New("Invalid mode")
+		}
+	}()
+}
+
+//
+func (bm *BridgeMessage) compile() error {
+	exec_message := bm.Message
+
+	proc_profile := exec_message.Profile
+	stdin_file_path := exec_message.StdinFilePath
+	exec_setting := exec_message.Setting
+
+	// arguments
+	args, err := proc_profile.Compile.MakeCompleteArgs(
+		exec_setting.CommandLine,
+		exec_setting.StructuredCommand,
+	)
+	if err != nil {
 		return err
 	}
 
-	// Drop privilege
-	if err := syscall.Setresgid(
-		bridge_info.JailedUser.GroupId,
-		bridge_info.JailedUser.GroupId,
-		bridge_info.JailedUser.GroupId,
-	); err != nil {
-		return errors.New("Could NOT drop GROUP privilege")
+	//
+	res_limit := &ResourceLimit{
+		CPU: exec_setting.CpuTimeLimit,		// CPU limit(sec)
+		AS: exec_setting.MemoryBytesLimit,	// Memory limit(bytes)
+		FSize: 5 * 1024 * 1024,				// Process can writes a file only 5 MBytes
 	}
 
-	if err := syscall.Setresuid(
-		bridge_info.JailedUser.UserId,
-		bridge_info.JailedUser.UserId,
-		bridge_info.JailedUser.UserId,
-	); err != nil {
-		return errors.New("Could NOT drop USER privilege")
-	}
+	_ = stdin_file_path
 
+	managedExec(res_limit, bm.Pipes, args, map[string]string{"PATH": "/bin"})
+
+	return nil
+}
+
+func (bm *BridgeMessage) link() error {
+	return nil
+}
+
+func (bm *BridgeMessage) run() error {
 	return nil
 }
 
 
 
-
-
-func fork() (int, error) {
-	syscall.ForkLock.Lock()
-	pid, _, err := syscall.Syscall(syscall.SYS_FORK, 0, 0, 0)
-	syscall.ForkLock.Unlock()
-	if err != 0 {
-		return -1, err
-	}
-	return int(pid), nil
-}
-
-func setLimit(resource int, value uint64) {
+func (ctx *Context) invokeBuild(
+	base_name			string,
+	sources				[]SourceData,
+	proc_profile		*ProcProfile,
+	build_inst			*BuildInstruction,
+	run_inst			*RunInstruction,
+) error {
 	//
-	if err := syscall.Setrlimit(resource, &syscall.Rlimit{value, value}); err != nil {
-		panic(err)
-	}
+	user_dir_path := ctx.makeUserDirName(base_name)
+	user_home_path := ctx.jailedUserDir
+	bin_base_path := filepath.Join(ctx.basePath, "bin")
+
+	//
+	err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
+		return ctx.invokeBuildCommand(
+			user_dir_path,
+			user_home_path,
+			bin_base_path,
+			jailed_user,
+
+			base_name,
+			sources,
+			proc_profile,
+			build_inst,
+		)
+	})
+
+	return err
 }
 
-type ResourceLimit struct {
-	CPU		uint64
-	AS		uint64
-	FSize	uint64
-}
 
-func (p *BridgePipes) execc(rl *ResourceLimit, command string, args []string, envs map[string]string) error {
 
-	pid, err := fork()
+
+
+func (ctx *Context) invokeBuildCommand(
+	user_dir_path		string,
+	user_home_path		string,
+	bin_base_path		string,
+	jailed_user			*JailedUserInfo,
+
+	base_name			string,
+	sources				[]SourceData,
+	proc_profile		*ProcProfile,
+	build_inst			*BuildInstruction,
+) error {
+	log.Println(">> called invokeBuildCommand")
+
+	// unpack source codes
+	source_contents, err := convertSourceToContent(sources)
 	if err != nil {
-		return err;
+		return err
 	}
-	if pid == 0 {
-		// child process
-		defer os.Exit(-1)
 
-		//
-		setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
-		setLimit(C.RLIMIT_NOFILE, 1024)		// Process can open 1024 files
-		setLimit(C.RLIMIT_NPROC, 20)		// Process can create 20 processes
-		setLimit(C.RLIMIT_MEMLOCK, 1024)	// Process can lock 1024 Bytes by mlock(2)
+	//
+	_, err = ctx.createMultipleTargets(base_name, jailed_user.GroupId, source_contents)
+	if err != nil {
+		return errors.New("couldn't create multi target : " + err.Error());
+	}
 
-		setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)
-		setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes [be careful!]
-		setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only 512 KBytes
+	//
+	if proc_profile.IsBuildRequired {
+		if build_inst == nil { return errors.New("compile_dataset is nil") }
 
-		// TODO: stdin
+		if build_inst.CompileSetting == nil { return errors.New("build_inst.CompileSetting is nil") }
+		message := BridgeMessage{
+			ChrootPath: user_dir_path,
+			JailedUserHomePath: user_home_path,
+			JailedUser: jailed_user,
+			Message: ExecMessage{
+				Profile: proc_profile,
+				Setting: build_inst.CompileSetting,
+				Mode: CompileMode,
+			},
+			IsReboot: false,
+		}
+		message.invokeProcessCloner(bin_base_path)
 
-		// redirect stdout
-		if err := syscall.Close(p.Stdout.ReadFd); err != nil { panic(err) }
-		if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
-		if err := syscall.Close(p.Stdout.WriteFd); err != nil { panic(err) }
-		// redirect stderr
-		if err := syscall.Close(p.Stderr.ReadFd); err != nil { panic(err) }
-		if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
-		if err := syscall.Close(p.Stderr.WriteFd); err != nil { panic(err) }
 
-		// set PATH env
-		if path, ok := envs["PATH"]; ok {
-			log.Print(path)
-			if err := os.Setenv("PATH", path); err != nil {
-				log.Fatal(err)
+		if proc_profile.IsLinkIndependent {
+			// link command is separated, so call linking commands
+			if build_inst.LinkSetting == nil { return errors.New("build_inst.LinkSetting is nil") }
+			message := BridgeMessage{
+				ChrootPath: user_dir_path,
+				JailedUserHomePath: user_home_path,
+				JailedUser: jailed_user,
+				Message: ExecMessage{
+					Profile: proc_profile,
+					Setting: build_inst.LinkSetting,
+					Mode: LinkMode,
+				},
+				IsReboot: true,		// mark as to reinvoke cloner
 			}
+			message.invokeProcessCloner(bin_base_path)
 		}
-
-		//
-		exec_path, err := exec.LookPath(command)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		//
-		var env_list []string
-		for k, v := range envs {
-			env_list = append(env_list, k + "=" + v)
-		}
-
-		err = syscall.Exec(exec_path, append([]string{command}, args...), env_list);
-		log.Fatal("unreachable : " + err.Error())
-		return nil
-
-	} else {
-		// parent process
-
-		//
-		syscall.Close(p.Stdout.WriteFd)
-		syscall.Close(p.Stderr.WriteFd)
-
-		//
-		process, err := os.FindProcess(pid)
-		if err != nil {
-			return err;
-		}
-
-		// parent process
-		wait_pid_chan := make(chan *os.ProcessState)
-		go func() {
-			ps, _ := process.Wait()
-			wait_pid_chan <- ps
-		}()
-
-		select {
-		case ps := <-wait_pid_chan:
-			usage, ok := ps.SysUsage().(*syscall.Rusage)
-			if !ok {
-				log.Fatal("akann")
-			}
-			fmt.Printf("%v", usage)
-
-			// usage.Maxrss -> Amount of memory usage (KB)
-
-		case <-time.After(time.Duration(rl.CPU * 2) * time.Second):
-			// timeout(e.g. process uses sleep a lot)
-		}
-
-
-		return nil
 	}
-}
-
-
-
-func (b *BrigdeInfo) Compile() {
-	e := b.Instruction
-	limit := &ResourceLimit{
-		CPU: e.Dataset.CpuTimeLimit,		// CPU can be used only cpu_limit_time(sec)
-		AS: e.Dataset.MemoryBytesLimit,		// Memory can be used only memory_limit_bytes
-		FSize: 5 * 1024 * 1024,				// Process can writes a file only 5 MBytes
+/*
+	//
+	user_dir_path, input_paths, err := ctx.reassignTarget(base_name, group_id, func(base_directory_name string) ([]string, error) {
+		path, err := ctx.createInput(base_directory_name, group_id, stdin)
+		if err != nil { return nil, err }
+		return []string{ path }, nil
+	})
+	if err != nil {
+		t.Errorf(err.Error())
+		return
 	}
+*/
 
-
-	b.Pipes.execc(limit, "ls", []string{"-la", "/"}, map[string]string{"PATH": "/bin"})
+	return nil
 }

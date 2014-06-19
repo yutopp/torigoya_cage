@@ -21,7 +21,7 @@ func TestCreateUser(t *testing.T) {
 	t.Logf("Create user = %s", test_user)
 	uid, gid, err := CreateUser(test_user)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("ababa" + err.Error())
 	}
 	if uid == 0 {
 		t.Errorf("invalid uid %d", uid)
@@ -33,6 +33,6 @@ func TestCreateUser(t *testing.T) {
 
 	t.Logf("Delete user = %s", test_user)
 	if err := DeleteUser(test_user); err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("ababa" + err.Error())
 	}
 }

@@ -26,15 +26,13 @@ func TestCreateTarget(t *testing.T) {
 	}
 
 	base_name := "aaa" + strconv.FormatInt(time.Now().Unix(), 10)
-	source_name := "prog.cpp"
-	content := "test test test"
+	content := TextContent{
+		"prog.cpp",
+		[]byte("test test test"),
+	}
 	group_id := 1000
 
-	source_full_path, err := ctx.createTarget(base_name, group_id, source_name, func(f *os.File) (error) {
-		// write content
-		_, err := f.WriteString(content)
-		return err
-	})
+	source_full_path, err := ctx.createTarget(base_name, group_id, content)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -42,7 +40,7 @@ func TestCreateTarget(t *testing.T) {
 
 	//
 	t.Logf("source path: %s", source_full_path)
-	if source_full_path != filepath.Join(ctx.sandboxDir, base_name, ctx.jailedUserDir, source_name) {
+	if source_full_path != filepath.Join(ctx.sandboxDir, base_name, ctx.jailedUserDir, content.Name) {
 		t.Errorf(fmt.Sprintf("%s", source_full_path))
 		return
 	}
@@ -60,21 +58,19 @@ func TestReassignTarget(t *testing.T) {
 	}
 
 	base_name := "aaa2" + strconv.FormatInt(time.Now().Unix(), 10)
-	source_name := "prog2.cpp"
-	content := "test test test2"
+	content := TextContent{
+		"prog.cpp",
+		[]byte("test test test"),
+	}
 	group_id := 1000
 
-	ctx.createTarget(base_name, group_id, source_name, func(f *os.File) (error) {
-		_, err := f.WriteString(content)
-		return err
-	})
+	ctx.createTarget(base_name, group_id, content)
 
 	user_dir_path, _, err := ctx.reassignTarget(
 		base_name,
 		group_id,
-		func(s string) (string, error) {
-			return "", nil
-		})
+		func(s string) ([]string, error) { return nil, nil },
+	)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -98,21 +94,19 @@ func TestReassignTarget2(t *testing.T) {
 	}
 
 	base_name := "aaa2" + strconv.FormatInt(time.Now().Unix(), 10)
-	source_name := "prog2.cpp"
-	content := "test test test2"
+	content := TextContent{
+		"prog.cpp",
+		[]byte("test test test"),
+	}
 	group_id := 1000
 
-	ctx.createTarget(base_name, group_id, source_name, func(f *os.File) (error) {
-		_, err := f.WriteString(content)
-		return err
-	})
+	ctx.createTarget(base_name, group_id, content)
 
 	user_dir_path, _, err := ctx.reassignTarget(
 		base_name,
 		group_id,
-		func(s string) (string, error) {
-			return "", nil
-		})
+		func(s string) ([]string, error) { return nil, nil },
+	)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -126,7 +120,7 @@ func TestReassignTarget2(t *testing.T) {
 	}
 
 
-	_, _, err = ctx.reassignTarget(base_name, group_id, func(s string) (string, error) {return "", nil})
+	_, _, err = ctx.reassignTarget(base_name, group_id, func(s string) ([]string, error) { return nil, nil })
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -143,20 +137,23 @@ func TestCreateInput(t *testing.T) {
 	}
 
 	base_name := "aaa3" + strconv.FormatInt(time.Now().Unix(), 10)
-	source_name := "prog2.cpp"
-	content := "test test test2"
+	content := TextContent{
+		"prog.cpp",
+		[]byte("test test test"),
+	}
 	group_id := 1000
 
-	stdin_name := "in" + strconv.FormatInt(time.Now().Unix(), 10)
-	stdin_content := "iniini~~~"
+	stdin := TextContent{
+		"in" + strconv.FormatInt(time.Now().Unix(), 10),
+		[]byte("iniini~~~"),
+	}
 
-	ctx.createTarget(base_name, group_id, source_name, func(f *os.File) (error) {
-		_, err := f.WriteString(content)
-		return err
-	})
+	ctx.createTarget(base_name, group_id, content)
 
-	user_dir_path, input_path, err := ctx.reassignTarget(base_name, group_id, func(base_directory_name string) (string, error) {
-		return ctx.createInput(base_directory_name, group_id, stdin_name, stdin_content)
+	user_dir_path, input_paths, err := ctx.reassignTarget(base_name, group_id, func(base_directory_name string) ([]string, error) {
+		path, err := ctx.createInput(base_directory_name, group_id, stdin)
+		if err != nil { return nil, err }
+		return []string{ path }, nil
 	})
 	if err != nil {
 		t.Errorf(err.Error())
@@ -170,17 +167,23 @@ func TestCreateInput(t *testing.T) {
 		return
 	}
 
+	if len(input_paths) != 1 {
+		t.Errorf("length of input_paths should be 1 (%d)", len(input_paths))
+		return
+	}
+
 	//
-	t.Logf("input path: %s", input_path)
-	if input_path != filepath.Join(ctx.sandboxDir, base_name, ctx.jailedUserDir, "stdin", stdin_name) {
-		t.Errorf(fmt.Sprintf("%s", input_path))
+	t.Logf("input path: %s", input_paths[0])
+	if input_paths[0] != filepath.Join(ctx.sandboxDir, base_name, ctx.jailedUserDir, "stdin", stdin.Name) {
+		t.Errorf("%v", input_paths)
 		return
 	}
 
 }
 
 
-func TestinvokeProcessClonerBase(t *testing.T) {
+/*
+func TestInvokeProcessClonerBase(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	err := invokeProcessClonerBase(filepath.Join(gopath, "bin"), "process_cloner", nil)
 	if err != nil {
@@ -188,12 +191,13 @@ func TestinvokeProcessClonerBase(t *testing.T) {
 		return
 	}
 }
+*/
 
 
 func TestBootStrap(t *testing.T) {
-	err := sandboxBootstrap(nil)
+	err := runAsManagedUser(nil)
 	if err != nil {
-		t.Errorf(err.Error())
+		t.Errorf("TestBootStrap" + err.Error())
 		return
 	}
 }
@@ -232,13 +236,74 @@ func TestBuild(t *testing.T) {
 	base_name := "aaa4" + strconv.FormatInt(time.Now().Unix(), 10)
 	sources := []SourceData{
 		SourceData{
+			"test.cpp",
+			[]byte(""),
+			false,
+		},
+	}
+
+	proc_profile := &ProcProfile{
+		IsBuildRequired: true,
+		IsLinkIndependent: true,
+	}
+
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
 
 	// build
-	if err := ctx.build(base_name, sources); err != nil {
+	if err := ctx.invokeBuild(base_name, sources, proc_profile, build_inst, nil); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+}
+
+
+func TestAAA(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+	ctx, err := InitContext(gopath)
+	if err != nil {
 		t.Errorf(err.Error())
 		return
 	}
 
+	//
+	base_name := "aaa5" + strconv.FormatInt(time.Now().Unix(), 10)
+
+	//
+	sources := []SourceData{
+		SourceData{
+			"prog.cpp",
+			[]byte(""),
+			false,
+		},
+	}
+
+	// load id:0/version:0.0.0
+	configs, _ := LoadProcConfigs(filepath.Join(gopath, "test_proc_profiles"))
+	proc_profile := configs[0].Versioned["0.0.0"]
+
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+	}
+
+	// build
+	if err := ctx.invokeBuild(base_name, sources, &proc_profile, build_inst, nil); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
 }

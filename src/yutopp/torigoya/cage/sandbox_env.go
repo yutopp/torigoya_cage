@@ -25,6 +25,43 @@ import(
 import "C"
 
 
+//
+func (bm *BridgeMessage) IntoJail() error {
+	if bm.JailedUser == nil {
+		return errors.New("Jailed User Info was NOT given")
+	}
+
+	//
+	if err := buildChrootEnv(
+		bm.ChrootPath,
+		bm.JailedUserHomePath,
+		bm.IsReboot,
+	); err != nil {
+		return err
+	}
+
+	// Drop privilege(group)
+	if err := syscall.Setresgid(
+		bm.JailedUser.GroupId,
+		bm.JailedUser.GroupId,
+		bm.JailedUser.GroupId,
+	); err != nil {
+		return errors.New("Could NOT drop GROUP privilege")
+	}
+
+	// Drop privilege(user)
+	if err := syscall.Setresuid(
+		bm.JailedUser.UserId,
+		bm.JailedUser.UserId,
+		bm.JailedUser.UserId,
+	); err != nil {
+		return errors.New("Could NOT drop USER privilege")
+	}
+
+	return nil
+}
+
+
 // mount system's
 // http://linuxjm.sourceforge.jp/html/LDP_man-pages/man2/mount.2.html
 var readOnlyMounts = []string {
@@ -43,13 +80,13 @@ var readOnlyMounts = []string {
 }
 
 
-func IntoJail(
+func buildChrootEnv(
 	chroot_root_full_path	string,
 	jail_home				string,
 	only_chroot				bool,
 ) (err error) {
-    log.Printf("IntoJail::chroot_root_full_path: %s\n", chroot_root_full_path);
-    log.Printf("IntoJail::jail_home: %s\n", jail_home);
+    log.Printf("buildChrootEnv::chroot_root_full_path: %s\n", chroot_root_full_path);
+    log.Printf("buildChrootEnv::jail_home: %s\n", jail_home);
 
 	expectRoot()
 
@@ -163,7 +200,7 @@ func IntoJail(
 		return errors.New(fmt.Sprintf("failed to chdir -> %s (%s)", jail_home, err))
 	}
 
-	log.Printf("<- IntoJail");
+	log.Printf("<- buildChrootEnv");
 
 	return nil
 }

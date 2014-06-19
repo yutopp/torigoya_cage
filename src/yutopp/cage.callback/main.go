@@ -12,12 +12,8 @@ import (
 	"os"
 
 	"yutopp/torigoya/cage"
-
-	"encoding/base64"
-	"github.com/ugorji/go/codec"
 )
 
-var msgPackHandler codec.MsgpackHandle
 
 func main() {
 	println("cage.callback booted")
@@ -28,14 +24,7 @@ func main() {
 		panic("arguments are invalid")
 	}
 
-	decoded_bytes, err := base64.StdEncoding.DecodeString(packed_torigoya_content)
-	if err != nil {
-		panic(err)
-	}
-
-	var bridge_info torigoya.BrigdeInfo
-	dec := codec.NewDecoderBytes(decoded_bytes, &msgPackHandler)
-	err = dec.Decode(&bridge_info)
+	bm, err := torigoya.DecodeBridgeMessage(packed_torigoya_content)
 	if err != nil {
 		panic(err)
 	}
@@ -43,9 +32,12 @@ func main() {
 	// !!! ===================
 	// Drop privilege
 	// !!! ===================
-	if err := bridge_info.Hoge(); err != nil {
+	if err := bm.IntoJail(); err != nil {
 		panic(err)
 	}
 
-	bridge_info.Compile()
+	// execute given commands!
+	if err := bm.Exec(); err != nil {
+		panic(err)
+	}
 }

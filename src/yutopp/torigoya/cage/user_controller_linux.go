@@ -50,7 +50,7 @@ func CreateUser(user_name string) (int, int, error) {
 func DeleteUser(user_name string) error {
 	user_delete_command := exec.Command("userdel", user_name)
 	if err := user_delete_command.Run(); err != nil {
-		return err
+		return errors.New("Failed to userdel : " + err.Error())
 	}
 
 	return nil
