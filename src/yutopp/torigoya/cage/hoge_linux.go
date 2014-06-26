@@ -11,82 +11,15 @@
 package torigoya
 
 import(
-	"fmt"
 	"log"
-	"strconv"
 	"time"
 	"errors"
 	"os"
-	"os/user"
 	"os/exec"
 	"syscall"
 	"path/filepath"
-
-	"encoding/base64"
-	"github.com/ugorji/go/codec"
 )
 
-type Context struct {
-	basePath		string
-
-	hostUser		*user.User
-
-	sandboxDir		string
-	homeDir			string
-	jailedUserDir	string
-}
-
-
-func InitContext(base_path string) (*Context, error) {
-	//
-	sandbox_dir := "/tmp/sandbox"
-
-	//
-	host_user_name := "yutopp"
-	host_user, err := user.Lookup(host_user_name)
-	if err != nil {
-		return nil, err
-	}
-
-	// In posix, Uid only contains numbers
-	host_user_id, _ := strconv.Atoi(host_user.Uid)
-
-	// create SANDBOX Directory, if not existed
-	if !fileExists(sandbox_dir) {
-		err := os.Mkdir(sandbox_dir, os.ModeDir | 0700)
-		if err != nil {
-			panic(fmt.Sprintf("Couldn't create directory %s", sandbox_dir))
-		}
-
-		if err := filepath.Walk(sandbox_dir, func(path string, info os.FileInfo, err error) error {
-			if err != nil { return err }
-			// r-x/---/---
-			err = guardPath(path, host_user_id, host_user_id, 0500)
-			return err
-		}); err != nil {
-			panic(fmt.Sprintf("Couldn't create directory %s", sandbox_dir))
-		}
-	}
-
-	return &Context{
-		basePath:			base_path,
-		hostUser:			host_user,
-		sandboxDir:			sandbox_dir,
-		homeDir:			"home",
-		jailedUserDir:		"home/torigoya",
-	}, nil
-}
-
-func F() int {
-
-	return 42
-}
-
-func expectRoot() {
-	if os.Geteuid() != 0 {
-		panic("run this program as root")
-	}
-}
 
 func (bm *BridgeMessage) invokeProcessCloner(
 	cloner_dir		string,
@@ -192,12 +125,13 @@ func invokeProcessClonerBase(
 		result, err := DecodeExecuteResult(result_buf)
 		log.Printf("??RESULT!!!!!!! %v / %v", result, err)
 
-
 	case <-time.After(500 * time.Second):
 		// TODO: fix
 		// will blocking( wait for response at least 500 seconds )
 		log.Println("TIMEOUT")
+		return errors.New("Process timeouted")
 	}
+
 	stdout_pipe.Close()
 	stderr_pipe.Close()
 	result_pipe.Close()
@@ -226,22 +160,17 @@ func readPipeAsync(fd int, cs chan<- error) {
 	cs <- nil
 }
 
-
 func readPipe(fd int) (result []byte, err error) {
 	buffer := make([]byte, 1024)
 
 	for {
-		log.Printf("= loop %d <><>", fd)
 		size, err := syscall.Read(fd, buffer)
-		log.Printf("= loop %d ==> %d", fd, size)
 		if err != nil {
 			break
 		}
 
 		if size != 0 {
 			result = append(result, buffer[:size]...)
-			log.Printf("= %d ==> %d", fd, size)
-			log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[0:size]))
 		} else {
 			break
 		}
@@ -253,23 +182,8 @@ func readPipe(fd int) (result []byte, err error) {
 
 
 
-
-
-
-
-
-
-
-
-
-
-type ProcTarget struct {
-	Id		int
-	Version	string
-}
-
-
-// For source codes, inputs
+// ========================================
+// For source codes, stdins
 type SourceData struct {
 	Name			string
 	Data			[]byte
@@ -277,7 +191,7 @@ type SourceData struct {
 }
 
 func convertSourceToContent(
-	sources []SourceData,
+	sources []*SourceData,
 ) ([]TextContent, error) {
 	source_contents := make([]TextContent, len(sources))
 
@@ -301,7 +215,7 @@ func convertSourceToContent(
 }
 
 
-//
+// ========================================
 type ExecutionSetting struct {
 	CommandLine			string
 	StructuredCommand	[][]string
@@ -309,13 +223,35 @@ type ExecutionSetting struct {
 	MemoryBytesLimit	uint64
 }
 
+
+// ========================================
 type BuildInstruction struct {
 	CompileSetting		*ExecutionSetting
 	LinkSetting			*ExecutionSetting
 }
 
+
+// ========================================
+type Input struct{
+	input				*SourceData
+	setting				*ExecutionSetting
+}
+
+
+// ========================================
 type RunInstruction struct {
-	Inputs				[]struct{ input *SourceData; setting *ExecutionSetting }
+	Inputs				[]Input
+}
+
+
+// ========================================
+type Ticket struct {
+	BaseName		string
+	ProcId			uint64
+	ProcVersion		string
+	Sources			[]*SourceData
+	BuildInst		*BuildInstruction
+	RunInst			*RunInstruction
 }
 
 
@@ -335,126 +271,9 @@ const (
 
 
 //
-type BridgePipes struct {
-	Stdout, Stderr, Result	*Pipe
-}
-
-func (bp *BridgePipes) Close() {
-	bp.Stdout.Close()
-	bp.Stderr.Close()
-	bp.Result.Close()
-}
-
-
-//
-type BridgeMessage struct {
-	ChrootPath			string
-	JailedUserHomePath	string
-	JailedUser			*JailedUserInfo
-	Pipes				*BridgePipes
-	Message				ExecMessage
-	IsReboot			bool
-}
-
-func (bm *BridgeMessage) Encode() (string, error) {
-	var msgpack_bytes []byte
-	enc := codec.NewEncoderBytes(&msgpack_bytes, &msgPackHandler)
-	if err := enc.Encode(*bm); err != nil {
-		return "", err
-	}
-	return base64.StdEncoding.EncodeToString(msgpack_bytes), nil
-}
-
-func DecodeBridgeMessage(base string) (*BridgeMessage, error) {
-	decoded_bytes, err := base64.StdEncoding.DecodeString(base)
-	if err != nil {
-		return nil, err
-	}
-
-	bm := &BridgeMessage{}
-	dec := codec.NewDecoderBytes(decoded_bytes, &msgPackHandler)
-	if err := dec.Decode(bm); err != nil {
-		return nil, err
-	}
-
-	return bm, nil
-}
-
-
-//
-func (bm *BridgeMessage) Exec() error {
-	m := bm.Message
-
-	exec_result, err := func() (*ExecutedResult, error) {
-		switch m.Mode {
-		case CompileMode:
-			return bm.compile()
-		case LinkMode:
-			return bm.link()
-		case RunMode:
-			return bm.run()
-		default:
-			return nil, errors.New("Exec:: Invalid mode")
-		}
-	}()
-	if err != nil {
-		exec_result = &ExecutedResult{
-			IsSystemFailed: true,
-			SystemErrorMessage: err.Error(),
-		}
-	}
-	if exec_result == nil {
-		exec_result = &ExecutedResult{
-			IsSystemFailed: true,
-			SystemErrorMessage: "Result was not generated",
-		}
-	}
-
-	return exec_result.sendTo(bm.Pipes)
-}
-
-//
-func (bm *BridgeMessage) compile() (*ExecutedResult, error) {
-	exec_message := bm.Message
-
-	proc_profile := exec_message.Profile
-	stdin_file_path := exec_message.StdinFilePath
-	exec_setting := exec_message.Setting
-
-	// arguments
-	args, err := proc_profile.Compile.MakeCompleteArgs(
-		exec_setting.CommandLine,
-		exec_setting.StructuredCommand,
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	//
-	res_limit := &ResourceLimit{
-		CPU: exec_setting.CpuTimeLimit,		// CPU limit(sec)
-		AS: exec_setting.MemoryBytesLimit,	// Memory limit(bytes)
-		FSize: 5 * 1024 * 1024,				// Process can writes a file only 5 MBytes
-	}
-
-	_ = stdin_file_path
-
-	return managedExec(res_limit, bm.Pipes, args, map[string]string{"PATH": "/bin"})
-}
-
-func (bm *BridgeMessage) link() (*ExecutedResult, error) {
-	return nil, nil
-}
-
-func (bm *BridgeMessage) run() (*ExecutedResult, error) {
-	return nil, nil
-}
-
-
-
 func (ctx *Context) invokeBuild(
 	base_name			string,
-	sources				[]SourceData,
+	sources				[]*SourceData,
 	proc_profile		*ProcProfile,
 	build_inst			*BuildInstruction,
 	run_inst			*RunInstruction,
@@ -493,7 +312,7 @@ func (ctx *Context) invokeBuildCommand(
 	jailed_user			*JailedUserInfo,
 
 	base_name			string,
-	sources				[]SourceData,
+	sources				[]*SourceData,
 	proc_profile		*ProcProfile,
 	build_inst			*BuildInstruction,
 ) error {

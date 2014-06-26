@@ -22,55 +22,8 @@ import(
 	"os"
 	"os/exec"
 	"syscall"
-
-	"github.com/ugorji/go/codec"
 )
 
-
-//
-type ExecutedResult struct {
-	UsedCPUTimeSec		float32
-	UsedMemoryBytes		uint64
-	Signal				int
-	ReturnCode			int
-	CommandLine			string
-	IsSystemFailed		bool
-	SystemErrorMessage	string
-}
-
-func (bm *ExecutedResult) Encode() ([]byte, error) {
-	var msgpack_bytes []byte
-	enc := codec.NewEncoderBytes(&msgpack_bytes, &msgPackHandler)
-	if err := enc.Encode(*bm); err != nil {
-		return nil, err
-	}
-	return msgpack_bytes, nil
-}
-
-func DecodeExecuteResult(base []byte) (*ExecutedResult, error) {
-	bm := &ExecutedResult{}
-	dec := codec.NewDecoderBytes(base, &msgPackHandler)
-	if err := dec.Decode(bm); err != nil {
-		return nil, err
-	}
-
-	return bm, nil
-}
-
-func (bm *ExecutedResult) sendTo(p *BridgePipes) error {
-	buf, err := bm.Encode()
-	if err != nil { return err }
-
-	syscall.Close(p.Result.ReadFd)
-
-	n, err := syscall.Write(p.Result.WriteFd, buf)
-	if err != nil { return errors.New(fmt.Sprintf("sendTo:: %v", err))  }
-	if n != len(buf) { return errors.New(fmt.Sprintf("sendTo:: couldn't write bytes (%d)", n)) }
-
-	syscall.Close(p.Result.WriteFd)
-
-	return nil
-}
 
 //
 type ResourceLimit struct {

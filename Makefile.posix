@@ -1,4 +1,4 @@
 CPP = g++
 
 process_cloner: process_cloner.src/process_cloner.cpp
-	$(CPP) -o bin/$@ -std=c++11 process_cloner.src/process_cloner.cpp
+	$(CPP) -o bin/$@ -std=c++11 -Wall process_cloner.src/process_cloner.cpp

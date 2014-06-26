@@ -18,6 +18,7 @@ import (
 	"gopkg.in/v1/yaml"
 )
 
+
 type Config map[string]struct {
 	Host		string
 	Port		int
@@ -29,9 +30,8 @@ func main() {
 	if err != nil {
 		panic("there is no \"config.yml\" file...")
 	}
-	fmt.Printf( "%s\n", config_bytes )
-	println("====")
 
+	//
 	config := Config{}
 	err = yaml.Unmarshal(config_bytes, &config)
 	if err != nil {
@@ -39,5 +39,9 @@ func main() {
 	}
 	fmt.Printf("--- t:\n%v\n\n", config)
 
-	println("hello!", torigoya.F())
+	//
+	fmt.Printf("Server starts...!\n")
+	if err := torigoya.RunServer(":12321", nil); err != nil {
+		fmt.Printf("Error (%v)\n", err)
+	}
 }

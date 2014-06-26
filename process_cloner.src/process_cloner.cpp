@@ -27,7 +27,7 @@ static_assert( sizeof( pid_t ) == sizeof( int ), "sizeof( pid_t ) != sizeof( int
 
 
 //
-int fork_shell( void* _unused )
+int fork_shell( void* /* unused */ )
 {
     // mount procfs
     //::mount( "procfs", "/proc", "proc", 0, nullptr );
@@ -42,10 +42,10 @@ int fork_shell( void* _unused )
         std::cerr << "A number of parameters is not enough." << std::endl;
         return -1;
     }
-
+/*
     std::cout << "c = " << callback_executable_r << std::endl
               << "p = " << packed_torigoya_content_r << std::endl;
-
+*/
     // construct envs
     char const* const command = callback_executable_r;
     char *exargv[] = {
@@ -59,7 +59,7 @@ int fork_shell( void* _unused )
     };
 
     char *exenvp[envs_num+1] = {};
-    for( auto i=0; i<envs.size(); ++i ) {
+    for( std::size_t i=0; i<envs.size(); ++i ) {
         char* const p = new char[envs[i].first.size() + std::strlen( envs[i].second ) + 1];
         std::copy( envs[i].first.cbegin(), envs[i].first.cend(), p );
         std::copy( envs[i].second, envs[i].second + std::strlen( envs[i].second ), p + envs[i].first.size() );

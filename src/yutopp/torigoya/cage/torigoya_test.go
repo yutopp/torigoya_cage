@@ -17,6 +17,7 @@ import (
 	"strconv"
 )
 
+
 func TestCreateTarget(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	ctx, err := InitContext(gopath)
@@ -234,8 +235,8 @@ func TestBuild(t *testing.T) {
 
 
 	base_name := "aaa4" + strconv.FormatInt(time.Now().Unix(), 10)
-	sources := []SourceData{
-		SourceData{
+	sources := []*SourceData{
+		&SourceData{
 			"test.cpp",
 			[]byte(""),
 			false,
@@ -278,8 +279,8 @@ func TestAAA(t *testing.T) {
 	base_name := "aaa5" + strconv.FormatInt(time.Now().Unix(), 10)
 
 	//
-	sources := []SourceData{
-		SourceData{
+	sources := []*SourceData{
+		&SourceData{
 			"prog.cpp",
 			[]byte(""),
 			false,
