@@ -129,7 +129,7 @@ func MakeInputFromTuple(tupled interface{}) (*Input, error) {
 	if len(interface_array) != 2 { return nil, errors.New("Input::invalid data(num of lement)") }
 
 	//
-	input, err := MakeSourceDataFromTuple(interface_array[0])
+	stdin, err := MakeSourceDataFromTuple(interface_array[0])
 	if err != nil { return nil, errors.New("Input::invalid data(0)") }
 
 	//
@@ -137,7 +137,7 @@ func MakeInputFromTuple(tupled interface{}) (*Input, error) {
 	if err != nil { return nil, errors.New("Input::invalid data(1)") }
 
 	return &Input{
-		input: input,
+		stdin: stdin,
 		setting: run_setting,
 	}, nil
 }

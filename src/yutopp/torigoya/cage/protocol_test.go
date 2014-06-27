@@ -44,9 +44,11 @@ func TestProtocolServer(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 
-	s := make(chan bool)
-	go RunServer(":12321", ctx, s)
-	<- s
+	e := make(chan error)
+	go RunServer(":12321", ctx, e)
+	if err := <- e; err != nil {
+		t.Fatal(err)
+	}
 
 	conn, err := net.Dial("tcp", ":12321")
 	if err != nil {

@@ -42,12 +42,12 @@ type TextContent struct {
 func (ctx *Context) createTarget(
 	base_name			string,
 	managed_group_id	int,
-	source				TextContent,
+	source				*TextContent,
 ) (string, error) {
 	source_full_paths, err := ctx.createMultipleTargets(
 		base_name,
 		managed_group_id,
-		[]TextContent{ source },
+		[]*TextContent{ source },
 	)
 	if err != nil {
 		return "", err
@@ -63,7 +63,7 @@ func (ctx *Context) createTarget(
 func (ctx *Context) createMultipleTargets(
 	base_name			string,
 	managed_group_id	int,
-	sources				[]TextContent,
+	sources				[]*TextContent,
 ) (source_full_paths []string, err error) {
 	log.Println(">> called createMultipleTargets")
 
@@ -184,6 +184,7 @@ func (ctx *Context) reassignTarget(
 	user_dir_path = ctx.makeUserDirName(base_name)
 
 	// delete directories exclude HOME
+	// TODO: DO NOT DELETE directories that mount HOST directories
 	dirs, err := filepath.Glob(user_dir_path + "/*")
 	if err != nil {
 		return "", nil, err
@@ -243,7 +244,7 @@ func (ctx *Context) reassignTarget(
 func (ctx *Context) createInput(
 	base_dir_path		string,
 	managed_group_id	int,
-	stdin				TextContent,
+	stdin				*TextContent,
 ) (stdin_full_path string, err error) {
 	log.Println("called SekiseiRunnerNodeServer::createInput")
 

@@ -9,8 +9,8 @@
 package main
 
 import (
-	"fmt"
 	"log"
+	"os"
 	"io/ioutil"
 
 	"yutopp/torigoya/cage"
@@ -26,22 +26,42 @@ type Config map[string]struct {
 }
 
 func main() {
+	cwd, err := os.Getwd()
+	if err != nil {
+		log.Panicf("Error (%v)\n", err)
+	}
+
+	log.Printf("%s\n", cwd)
+
 	config_bytes, err := ioutil.ReadFile("config.yml")
 	if err != nil {
-		panic("there is no \"config.yml\" file...")
+		log.Panic("There is no \"config.yml\" file...")
 	}
 
 	//
 	config := Config{}
 	err = yaml.Unmarshal(config_bytes, &config)
 	if err != nil {
-		log.Fatalf("error: %v", err)
+		log.Panicf("Error (%v)\n", err)
 	}
-	fmt.Printf("--- t:\n%v\n\n", config)
+	log.Printf("--- t:\n%v\n\n", config)
 
 	//
-	fmt.Printf("Server starts...!\n")
-	if err := torigoya.RunServer(":12321", nil); err != nil {
-		fmt.Printf("Error (%v)\n", err)
+	ctx, err := torigoya.InitContext(cwd)
+	if err != nil {
+		log.Panicf(err.Error())
 	}
+
+	//
+	log.Printf("Server initializing...\n")
+	e := make(chan error)
+	go func() {
+		if err := <- e; err != nil {
+			log.Panicf("Error (%v)\n", err)
+		}
+		log.Printf("Server starts!\n")
+	}()
+
+	//
+	torigoya.RunServer(":12321", ctx, e)
 }

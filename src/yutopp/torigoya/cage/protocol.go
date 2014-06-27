@@ -26,7 +26,7 @@ const (
 	HeaderRequest		= 0
 	HeaderOutputs		= 1
 	HeaderResult		= 2
-	HeaderError			= 3
+	HeaderSystemError	= 3
 	HeaderExit			= 4
 
 	HeaderIndexEnd		= 4

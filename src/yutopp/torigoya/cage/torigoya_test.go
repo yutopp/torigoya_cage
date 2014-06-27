@@ -27,7 +27,7 @@ func TestCreateTarget(t *testing.T) {
 	}
 
 	base_name := "aaa" + strconv.FormatInt(time.Now().Unix(), 10)
-	content := TextContent{
+	content := &TextContent{
 		"prog.cpp",
 		[]byte("test test test"),
 	}
@@ -59,7 +59,7 @@ func TestReassignTarget(t *testing.T) {
 	}
 
 	base_name := "aaa2" + strconv.FormatInt(time.Now().Unix(), 10)
-	content := TextContent{
+	content := &TextContent{
 		"prog.cpp",
 		[]byte("test test test"),
 	}
@@ -95,7 +95,7 @@ func TestReassignTarget2(t *testing.T) {
 	}
 
 	base_name := "aaa2" + strconv.FormatInt(time.Now().Unix(), 10)
-	content := TextContent{
+	content := &TextContent{
 		"prog.cpp",
 		[]byte("test test test"),
 	}
@@ -138,13 +138,13 @@ func TestCreateInput(t *testing.T) {
 	}
 
 	base_name := "aaa3" + strconv.FormatInt(time.Now().Unix(), 10)
-	content := TextContent{
+	content := &TextContent{
 		"prog.cpp",
 		[]byte("test test test"),
 	}
 	group_id := 1000
 
-	stdin := TextContent{
+	stdin := &TextContent{
 		"in" + strconv.FormatInt(time.Now().Unix(), 10),
 		[]byte("iniini~~~"),
 	}
@@ -259,8 +259,12 @@ func TestBuild(t *testing.T) {
 		},
 	}
 
+	f := func(v interface{}) {
+		t.Logf("%V", v)
+	}
+
 	// build
-	if err := ctx.invokeBuild(base_name, sources, proc_profile, build_inst, nil); err != nil {
+	if err := ctx.invokeBuild(base_name, sources, proc_profile, build_inst, f); err != nil {
 		t.Errorf(err.Error())
 		return
 	}

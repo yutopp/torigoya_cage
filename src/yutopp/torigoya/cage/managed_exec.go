@@ -98,8 +98,11 @@ func managedExec(
 			error_len, _ := syscall.Read(error_pipe.ReadFd, error_buf)
 			if error_len < len(errorSequence) {
 				// execution was succeeded
+
+				// TODO: check exit status code
+
 				return &ExecutedResult{
-					IsSystemFailed: false,
+					Status: Passed,
 				}, nil
 
 			} else {

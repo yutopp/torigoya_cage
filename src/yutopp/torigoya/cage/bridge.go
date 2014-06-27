@@ -84,13 +84,13 @@ func (bm *BridgeMessage) Exec() error {
 	}()
 	if err != nil {
 		exec_result = &ExecutedResult{
-			IsSystemFailed: true,
+			Status: UnexpectedError,
 			SystemErrorMessage: err.Error(),
 		}
 	}
 	if exec_result == nil {
 		exec_result = &ExecutedResult{
-			IsSystemFailed: true,
+			Status: UnexpectedError,
 			SystemErrorMessage: "Result was not generated",
 		}
 	}

@@ -31,6 +31,9 @@ type Context struct {
 
 
 func InitContext(base_path string) (*Context, error) {
+	// TODO: change to checking capability
+	expectRoot()
+
 	//
 	sandbox_dir := "/tmp/sandbox"
 

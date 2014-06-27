@@ -11,14 +11,16 @@ import (
 )
 
 
-func RunServer(laddr string, context *Context, notifier chan bool) error {
+func RunServer(laddr string, context *Context, notifier chan<-error) error {
 	listener, err := net.Listen("tcp", laddr)
-	if err != nil { return err }
+	if err != nil {
+		notifier <- err
+		return err
+	}
 	defer listener.Close()
 
-	if notifier != nil {
-		notifier <- true
-	}
+	// there are no error
+	if notifier != nil { notifier <- nil }
 
 	for {
 		// Wait for a connection.

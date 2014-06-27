@@ -14,14 +14,15 @@ import(
 
 
 // Status of Result
+type ExecutedStatus		int
 const (
-    MemoryLimit = 1
-    CPULimit = 2
-    OutputLimit = 22
-    Error = 3
-    InvalidCommand = 31
-    Passed = 4
-    UnexpectedError = 5
+    MemoryLimit		= ExecutedStatus(1)
+    CPULimit		= ExecutedStatus(2)
+    OutputLimit		= ExecutedStatus(22)
+    Error			= ExecutedStatus(3)
+    InvalidCommand	= ExecutedStatus(31)
+    Passed			= ExecutedStatus(4)
+    UnexpectedError	= ExecutedStatus(5)
 )
 
 //
@@ -31,8 +32,13 @@ type ExecutedResult struct {
 	Signal				int
 	ReturnCode			int
 	CommandLine			string
-	IsSystemFailed		bool
+	Status				ExecutedStatus
 	SystemErrorMessage	string
+}
+
+func (bm *ExecutedResult) IsFailed() bool {
+	// TODO: implement
+	return false;
 }
 
 func (bm *ExecutedResult) Encode() ([]byte, error) {
