@@ -19,6 +19,7 @@ import(
 	"strconv"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -95,8 +96,9 @@ func (ctx *Context) createMultipleTargets(
 	//
 	if fileExists(user_dir_path) {
 		log.Printf("user directory %s is already existed, so remove them\n", user_dir_path)
-		err := os.RemoveAll(user_dir_path)
-		if err != nil {
+		// TODO:
+		umountAll(user_dir_path)
+		if err := os.RemoveAll(user_dir_path); err != nil {
 			return nil, errors.New(fmt.Sprintf("Couldn't remove directory %s (%s)", user_dir_path, err))
 		}
 	}
@@ -128,8 +130,9 @@ func (ctx *Context) createMultipleTargets(
 	if err := os.Mkdir(user_home_path, os.ModeDir); err != nil {
 		return nil, errors.New(fmt.Sprintf("Couldn't create directory %s (%s)", user_home_path, err))
 	}
-	// host_user_id:managed_group_id // rwx/r-x/---
-	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0750); err != nil {
+	// host_user_id:managed_group_id // rwx/rwx/---
+	// NOTE: add "write" permission to group to output executable files
+	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0770); err != nil {
 		return nil, err
 	}
 
@@ -149,8 +152,8 @@ func (ctx *Context) createMultipleTargets(
 		defer func() {
 			f.Close()
 			log.Printf("-> %s\n", source_full_path)
-			// host_user_id:managed_group_id // r--/---/---
-			err = guardPath(source_full_path, host_user_id, managed_group_id, 0400)
+			// host_user_id:managed_group_id // r--/r--/---
+			err = guardPath(source_full_path, host_user_id, managed_group_id, 0440)
 		}()
 
 		//
@@ -165,13 +168,14 @@ func (ctx *Context) createMultipleTargets(
 
 
 //
-type reassignTargetCallback func(string) ([]string, error)
+type reassignTargetCallback func(string) (*string, error)
 
 func (ctx *Context) reassignTarget(
-	base_name string,
-	managed_group_id int,
-	callback reassignTargetCallback,
-) (user_dir_path string, input_path []string, err error) {
+	base_name				string,
+	managed_user_id			int,
+	managed_group_id		int,
+	callback				reassignTargetCallback,
+) (user_dir_path string, input_path *string, err error) {
 	log.Println("called SekiseiRunnerNodeServer::reassign_target")
 
     expectRoot()
@@ -180,28 +184,12 @@ func (ctx *Context) reassignTarget(
 	host_user_id, _ := strconv.Atoi(ctx.hostUser.Uid)
 	fmt.Printf("host uid: %s\n", ctx.hostUser.Uid)
 
-	//
-	user_dir_path = ctx.makeUserDirName(base_name)
-
-	// delete directories exclude HOME
-	// TODO: DO NOT DELETE directories that mount HOST directories
-	dirs, err := filepath.Glob(user_dir_path + "/*")
-	if err != nil {
+	if err := ctx.cleanupMountedFiles(base_name); err != nil {
 		return "", nil, err
 	}
-	for _, dir := range dirs {
-		rel_dir, err := filepath.Rel(user_dir_path, dir)
-		if err != nil {
-			return "", nil, err
-		}
 
-		if rel_dir != ctx.homeDir {
-			err := os.RemoveAll(dir)
-			if err != nil {
-				return "", nil, errors.New(fmt.Sprintf("Couldn't remove directory %s (%s)", dir, err))
-			}
-		}
-	}
+	//
+	user_dir_path = ctx.makeUserDirName(base_name)
 
 	// chmod /home // host_user_id:managed_group_id // r-x/r-x/---
 	user_home_base_path := filepath.Join(user_dir_path, ctx.homeDir)
@@ -217,9 +205,11 @@ func (ctx *Context) reassignTarget(
 	}
 
 	// call user block
-	input_paths, err := callback(user_dir_path)
-	if err != nil {
-		return "", nil, err
+	if callback != nil {
+		input_path, err = callback(user_dir_path)
+		if err != nil {
+			return "", nil, err
+		}
 	}
 
 	// host_user_id:managed_group_id // rwx/r-x/---
@@ -229,15 +219,69 @@ func (ctx *Context) reassignTarget(
 
 	//
 	err = filepath.Walk(user_home_path, func(path string, info os.FileInfo, err error) error {
-		log.Println(path)
 		if err != nil { return err }
-		if err := os.Chown(path, host_user_id, managed_group_id); err != nil {
-			return errors.New(fmt.Sprintf("Couldn't chown %s, %s", path, err.Error()))
+		if !info.IsDir() {
+			if info.Mode() & 0100 != 0 {
+				// specialize if has permission --x/---/---
+				if err := os.Chown(path, managed_user_id, managed_group_id); err != nil {
+					return errors.New(fmt.Sprintf("Couldn't chown %s, %s", path, err.Error()))
+				}
+
+				log.Printf("reassgin::chown %s -> %d : %d \n", path, managed_user_id, managed_group_id)
+
+			} else {
+				//
+				if err := os.Chown(path, host_user_id, managed_group_id); err != nil {
+					return errors.New(fmt.Sprintf("Couldn't chown %s, %s", path, err.Error()))
+				}
+
+				log.Printf("reassgin::chown %s -> %d : %d \n", path, host_user_id, managed_group_id)
+			}
 		}
 		return err
 	})
 
-	return user_dir_path, input_paths, err
+	fmt.Printf("==================================================\n")
+	out, err := exec.Command("/bin/ls", "-laR", user_home_path).Output()
+	if err != nil {
+		fmt.Printf("error:: %s\n", err.Error())
+	} else {
+		fmt.Printf("passed:: %s\n", out)
+	}
+
+	return user_dir_path, input_path, err
+}
+
+
+func (ctx *Context) cleanupMountedFiles(
+	base_name				string,
+) error {
+	log.Println("called file_mapping::cleanupMountedFiles")
+
+    expectRoot()
+
+	//
+	user_dir_path := ctx.makeUserDirName(base_name)
+
+	// delete directories exclude HOME
+	// TODO: DO NOT DELETE directories that mount HOST directories
+	dirs, err := filepath.Glob(filepath.Join(user_dir_path, "/*"))
+	if err != nil { return err }
+
+	for _, dir := range dirs {
+		rel_dir, err := filepath.Rel(user_dir_path, dir)
+		if err != nil { return err }
+
+		if rel_dir != ctx.homeDir {
+			umountAll(dir)
+			err := os.RemoveAll(dir)
+			if err != nil {
+				return errors.New(fmt.Sprintf("Couldn't remove directory %s (%s)", dir, err))
+			}
+		}
+	}
+
+	return nil
 }
 
 
@@ -314,6 +358,16 @@ func guardPath(file_path string, user_id int, group_id int, mode os.FileMode) er
 	}
 	if err := os.Chmod(file_path, mode); err != nil {
 		return errors.New(fmt.Sprintf("Couldn't chmod %s, %s", file_path, err.Error()))
+	}
+
+	return nil
+}
+
+
+func umountAll(dir_name string) error {
+	umount_command := exec.Command("umount", "--recursive", "--force", dir_name)
+	if err := umount_command.Run(); err != nil {
+		return errors.New("Failed to umount : " + err.Error())
 	}
 
 	return nil

@@ -20,7 +20,7 @@ import (
 
 func TestCreateTarget(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath)
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -52,7 +52,7 @@ func TestCreateTarget(t *testing.T) {
 
 func TestReassignTarget(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath)
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -63,14 +63,16 @@ func TestReassignTarget(t *testing.T) {
 		"prog.cpp",
 		[]byte("test test test"),
 	}
+	user_id := 1000
 	group_id := 1000
 
 	ctx.createTarget(base_name, group_id, content)
 
 	user_dir_path, _, err := ctx.reassignTarget(
 		base_name,
+		user_id,
 		group_id,
-		func(s string) ([]string, error) { return nil, nil },
+		func(s string) (*string, error) { return nil, nil },
 	)
 	if err != nil {
 		t.Errorf(err.Error())
@@ -88,7 +90,7 @@ func TestReassignTarget(t *testing.T) {
 
 func TestReassignTarget2(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath)
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -99,14 +101,16 @@ func TestReassignTarget2(t *testing.T) {
 		"prog.cpp",
 		[]byte("test test test"),
 	}
+	user_id := 1000
 	group_id := 1000
 
 	ctx.createTarget(base_name, group_id, content)
 
 	user_dir_path, _, err := ctx.reassignTarget(
 		base_name,
+		user_id,
 		group_id,
-		func(s string) ([]string, error) { return nil, nil },
+		func(s string) (*string, error) { return nil, nil },
 	)
 	if err != nil {
 		t.Errorf(err.Error())
@@ -121,7 +125,7 @@ func TestReassignTarget2(t *testing.T) {
 	}
 
 
-	_, _, err = ctx.reassignTarget(base_name, group_id, func(s string) ([]string, error) { return nil, nil })
+	_, _, err = ctx.reassignTarget(base_name, user_id, group_id, func(s string) (*string, error) { return nil, nil })
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -131,7 +135,7 @@ func TestReassignTarget2(t *testing.T) {
 
 func TestCreateInput(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath)
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -142,6 +146,7 @@ func TestCreateInput(t *testing.T) {
 		"prog.cpp",
 		[]byte("test test test"),
 	}
+	user_id := 1000
 	group_id := 1000
 
 	stdin := &TextContent{
@@ -151,10 +156,10 @@ func TestCreateInput(t *testing.T) {
 
 	ctx.createTarget(base_name, group_id, content)
 
-	user_dir_path, input_paths, err := ctx.reassignTarget(base_name, group_id, func(base_directory_name string) ([]string, error) {
+	user_dir_path, input_path, err := ctx.reassignTarget(base_name, user_id, group_id, func(base_directory_name string) (*string, error) {
 		path, err := ctx.createInput(base_directory_name, group_id, stdin)
 		if err != nil { return nil, err }
-		return []string{ path }, nil
+		return &path, nil
 	})
 	if err != nil {
 		t.Errorf(err.Error())
@@ -168,15 +173,15 @@ func TestCreateInput(t *testing.T) {
 		return
 	}
 
-	if len(input_paths) != 1 {
-		t.Errorf("length of input_paths should be 1 (%d)", len(input_paths))
+	if input_path == nil {
+		t.Errorf("length of input_paths should not be nil (%v)", input_path)
 		return
 	}
 
 	//
-	t.Logf("input path: %s", input_paths[0])
-	if input_paths[0] != filepath.Join(ctx.sandboxDir, base_name, ctx.jailedUserDir, "stdin", stdin.Name) {
-		t.Errorf("%v", input_paths)
+	t.Logf("input path: %s", *input_path)
+	if *input_path != filepath.Join(ctx.sandboxDir, base_name, ctx.jailedUserDir, "stdin", stdin.Name) {
+		t.Errorf("%v", *input_path)
 		return
 	}
 
@@ -227,7 +232,7 @@ func TestExec(t *testing.T) {
 
 func TestBuild(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath)
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -264,16 +269,16 @@ func TestBuild(t *testing.T) {
 	}
 
 	// build
-	if err := ctx.invokeBuild(base_name, sources, proc_profile, build_inst, f); err != nil {
+	if err := ctx.execManagedBuild(proc_profile, base_name, sources, build_inst, f); err != nil {
 		t.Errorf(err.Error())
 		return
 	}
 }
 
 
-func TestAAA(t *testing.T) {
+func TestInvokeBuild(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath)
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -286,14 +291,20 @@ func TestAAA(t *testing.T) {
 	sources := []*SourceData{
 		&SourceData{
 			"prog.cpp",
-			[]byte(""),
+			[]byte(`
+#include <iostream>
+
+int main() {
+	std::cout << "hello!" << std::endl;
+}
+`),
 			false,
 		},
 	}
 
 	// load id:0/version:0.0.0
 	configs, _ := LoadProcConfigs(filepath.Join(gopath, "test_proc_profiles"))
-	proc_profile := configs[0].Versioned["0.0.0"]
+	proc_profile := configs[0].Versioned["test"]
 
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
@@ -307,7 +318,80 @@ func TestAAA(t *testing.T) {
 	}
 
 	// build
-	if err := ctx.invokeBuild(base_name, sources, &proc_profile, build_inst, nil); err != nil {
+	if err := ctx.execManagedBuild(&proc_profile, base_name, sources, build_inst, nil); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+}
+
+
+
+func TestTicket(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	base_name := "aaa6" + strconv.FormatInt(time.Now().Unix(), 10)
+
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
+#include <iostream>
+
+int main() {
+	std::cout << "hello!" << std::endl;
+}
+`),
+			false,
+		},
+	}
+
+	//
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+	}
+
+	//
+	run_inst := &RunInstruction{
+		Inputs: []Input{
+			Input{
+				stdin: nil,
+				setting: &ExecutionSetting{
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
+		},
+	}
+
+	//
+	ticket := &Ticket{
+		BaseName: base_name,
+		ProcId: 0,
+		ProcVersion: "test",
+		Sources: sources,
+		BuildInst: build_inst,
+		RunInst: run_inst,
+	}
+
+	f := func(v interface{}) {
+		t.Logf("%V", v)
+	}
+
+	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
 		return
 	}

@@ -1,0 +1,33 @@
+---
+version: test
+is_build_required: true
+is_link_independent: true
+
+source:
+  file: prog
+  extension: cpp
+compile:
+  file: prog
+  extension: o
+  command: g++
+  env:
+    PATH: /usr/bin
+  allowed_command_line:
+    null
+  fixed_command_line:
+  - ['-c', "prog.cpp"]
+  - ['-o', "prog.o"]
+link:
+  file: prog
+  extension: out
+  command: g++
+  env:
+    PATH: /usr/bin
+  fixed_command_line:
+  - ["prog.o"]
+  - ['-o', "prog.out"]
+run:
+  command: ./prog.out
+  env:
+  allowed_command_line:
+  fixed_command_line:

@@ -91,19 +91,19 @@ int main( int argc, char* argv[] )
                                      CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWIPC | CLONE_NEWUTS | SIGCHLD | CLONE_UNTRACED,
                                      nullptr );
     if ( child_pid == -1 ) {
-        fprintf(stderr, "Clone failed. PID namespaces ARE NOT supported\n");
+        std::cerr << "Clone failed. PID namespaces ARE NOT supported" << std::endl;
         return -1;
     }
-    printf( "SANDBOX: fork end - parents - PID: %d\n", getpid() );
+    std::cout << "%%%%%%%%%% SANDBOX: fork end - parents - PID: " << getpid() << std::endl;
 
     //
     int status;
     if ( ::waitpid( child_pid, &status, 0 ) == -1 ) {
-        fprintf(stderr, "waitpid failed\n");
+        std::cerr << "waitpid failed" << std::endl;
         return -1;
     }
 
-    printf( "&&&&&&&&&&&&&&&& exit status code: %d\n", status );
+    std::cout << "%%%%%%%%%% SANDBOX: exit status code: " << status << std::endl;
 
     if ( status == 0 ) {
         return 0;

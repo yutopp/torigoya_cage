@@ -10,6 +10,9 @@ package main
 
 import (
 	"log"
+	"regexp"
+	"flag"
+	"fmt"
 	"os"
 	"io/ioutil"
 
@@ -18,11 +21,14 @@ import (
 	"gopkg.in/v1/yaml"
 )
 
+// replace string "${base}"
+var base_reg = regexp.MustCompile("\\$\\{base\\}")
 
-type Config map[string]struct {
-	Host		string
-	Port		int
-	Host_user	string
+type Config map[string]*struct {
+	Host				string `yaml:"host"`
+	Port				int `yaml:"port"`
+	HostUser			string `yaml:"host_user"`
+	LangProcConfigDir	string `yaml:"lang_proc_config_dir"`
 }
 
 func main() {
@@ -33,9 +39,14 @@ func main() {
 
 	log.Printf("%s\n", cwd)
 
-	config_bytes, err := ioutil.ReadFile("config.yml")
+	//
+	config_path := flag.String("config_path", "config.yml", "path to config.yml")
+	mode := flag.String("mode", "local_debug", "select mode from config")
+
+	//
+	config_bytes, err := ioutil.ReadFile(*config_path)
 	if err != nil {
-		log.Panic("There is no \"config.yml\" file...")
+		log.Panicf("There is no \"%s\" file...", *config_path)
 	}
 
 	//
@@ -44,10 +55,29 @@ func main() {
 	if err != nil {
 		log.Panicf("Error (%v)\n", err)
 	}
-	log.Printf("--- t:\n%v\n\n", config)
+	for _, v := range config {
+		// replace meta string to instance
+		v.LangProcConfigDir = base_reg.ReplaceAllString(v.LangProcConfigDir, cwd)
+	}
 
 	//
-	ctx, err := torigoya.InitContext(cwd)
+	target_config, ok := config[*mode]
+	if !ok {
+		fmt.Printf("the mode \"%s\" is not seletable. choose from below", *mode)
+		for k, _ := range config {
+			fmt.Printf("-> %s", k)
+		}
+		os.Exit(-1)
+	}
+
+	// show
+	log.Printf("Host:       %s\n", target_config.Host)
+	log.Printf("Port:       %d\n", target_config.Port)
+	log.Printf("HostUser:   %s\n", target_config.HostUser)
+	log.Printf("Profiles:   %s\n", target_config.LangProcConfigDir)
+
+	//
+	ctx, err := torigoya.InitContext(cwd, target_config.HostUser, target_config.LangProcConfigDir)
 	if err != nil {
 		log.Panicf(err.Error())
 	}
@@ -62,6 +92,6 @@ func main() {
 		log.Printf("Server starts!\n")
 	}()
 
-	//
-	torigoya.RunServer(":12321", ctx, e)
+	// host, port
+	torigoya.RunServer(target_config.Host, target_config.Port, ctx, e)
 }

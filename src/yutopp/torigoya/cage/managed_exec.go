@@ -39,10 +39,12 @@ var errorSequence = []byte{ 0x0d, 0x0e, 0x0a, 0x0d }
 
 //
 func managedExec(
-	rl *ResourceLimit,
-	p *BridgePipes,
-	args []string,
-	envs map[string]string,
+	rl					*ResourceLimit,
+	p					*BridgePipes,
+	args				[]string,
+	envs				map[string]string,
+	umask				int,
+	stdin_file_path		*string,
 ) (*ExecutedResult, error) {
 	// make a pipe for error reports
 	error_pipe, err := makePipe()
@@ -56,7 +58,7 @@ func managedExec(
 	}
 	if pid == 0 {
 		// child process
-		child(rl, p, *error_pipe, args, envs)
+		managedExecChild(rl, p, *error_pipe, args, envs, umask, stdin_file_path)
 		return nil, nil
 
 	} else {
@@ -134,12 +136,14 @@ func managedExec(
 }
 
 
-func child(
-	rl *ResourceLimit,
-	p *BridgePipes,
-	error_pipe Pipe,
-	args []string,
-	envs map[string]string,
+func managedExecChild(
+	rl					*ResourceLimit,
+	p					*BridgePipes,
+	error_pipe			Pipe,
+	args				[]string,
+	envs				map[string]string,
+	umask				int,
+	stdin_file_path		*string,
 ) {
 	// if called this function, child process is failed to execute
 	defer func() {
@@ -157,7 +161,8 @@ func child(
 		os.Exit(-1)
 	}()
 
-	print("aaaaaaaa ============= child")
+	fmt.Printf("============= child (%v)\n", args)
+	fmt.Printf("============= envs  (%v)\n", envs)
 
 	//
 	setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
@@ -167,7 +172,10 @@ func child(
 
 	setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)
 	setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes [be careful!]
-	setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only 512 KBytes
+	setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only FSize Bytes
+
+	//
+	syscall.Umask(umask)
 
 	// TODO: stdin
 

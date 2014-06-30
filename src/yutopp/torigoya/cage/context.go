@@ -12,6 +12,7 @@ package torigoya
 
 import(
 	"fmt"
+	"errors"
 	"strconv"
 	"os"
 	"os/user"
@@ -27,10 +28,15 @@ type Context struct {
 	sandboxDir		string
 	homeDir			string
 	jailedUserDir	string
+	procConfTable	ProcConfigTable
 }
 
 
-func InitContext(base_path string) (*Context, error) {
+func InitContext(
+	base_path string,
+	host_user_name string,
+	proc_config_path string,
+) (*Context, error) {
 	// TODO: change to checking capability
 	expectRoot()
 
@@ -38,7 +44,6 @@ func InitContext(base_path string) (*Context, error) {
 	sandbox_dir := "/tmp/sandbox"
 
 	//
-	host_user_name := "yutopp"
 	host_user, err := user.Lookup(host_user_name)
 	if err != nil {
 		return nil, err
@@ -51,7 +56,7 @@ func InitContext(base_path string) (*Context, error) {
 	if !fileExists(sandbox_dir) {
 		err := os.Mkdir(sandbox_dir, os.ModeDir | 0700)
 		if err != nil {
-			panic(fmt.Sprintf("Couldn't create directory %s", sandbox_dir))
+			return nil, errors.New(fmt.Sprintf("Couldn't create directory %s", sandbox_dir))
 		}
 
 		if err := filepath.Walk(sandbox_dir, func(path string, info os.FileInfo, err error) error {
@@ -60,15 +65,23 @@ func InitContext(base_path string) (*Context, error) {
 			err = guardPath(path, host_user_id, host_user_id, 0500)
 			return err
 		}); err != nil {
-			panic(fmt.Sprintf("Couldn't create directory %s", sandbox_dir))
+			return nil, errors.New(fmt.Sprintf("Couldn't create directory %s", sandbox_dir))
 		}
 	}
 
+	// LoadProcConfigTable
+	proc_conf_table, err := LoadProcConfigs(proc_config_path)
+	if err != nil {
+		return nil, err
+	}
+
+	//
 	return &Context{
 		basePath:			base_path,
 		hostUser:			host_user,
 		sandboxDir:			sandbox_dir,
 		homeDir:			"home",
 		jailedUserDir:		"home/torigoya",
+		procConfTable:		proc_conf_table,
 	}, nil
 }

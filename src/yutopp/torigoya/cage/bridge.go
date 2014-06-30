@@ -104,7 +104,7 @@ func (bm *BridgeMessage) compile() (*ExecutedResult, error) {
 	exec_message := bm.Message
 
 	proc_profile := exec_message.Profile
-	stdin_file_path := exec_message.StdinFilePath
+	var stdin_file_path *string = nil	// ignore stdin
 	exec_setting := exec_message.Setting
 
 	// arguments
@@ -120,22 +120,82 @@ func (bm *BridgeMessage) compile() (*ExecutedResult, error) {
 	res_limit := &ResourceLimit{
 		CPU: exec_setting.CpuTimeLimit,		// CPU limit(sec)
 		AS: exec_setting.MemoryBytesLimit,	// Memory limit(bytes)
-		FSize: 5 * 1024 * 1024,				// Process can writes a file only 5 MBytes
+		FSize: 5 * 1024 * 1024,				// Process can writes a file only 5MiB
 	}
 
-	_ = stdin_file_path
+	//
+	env := proc_profile.Compile.Env
+	umask := 0077	// rwx --- ---
 
-	return managedExec(res_limit, bm.Pipes, args, map[string]string{"PATH": "/bin"})
+	// execute!
+	return managedExec(res_limit, bm.Pipes, args, env, umask, stdin_file_path)
 }
 
+
+//
 func (bm *BridgeMessage) link() (*ExecutedResult, error) {
 	log.Println(">> called BridgeMessage::link")
 
-	return nil, nil
+	exec_message := bm.Message
+
+	proc_profile := exec_message.Profile
+	var stdin_file_path *string = nil	// ignore stdin
+	exec_setting := exec_message.Setting
+
+	// arguments
+	args, err := proc_profile.Link.MakeCompleteArgs(
+		exec_setting.CommandLine,
+		exec_setting.StructuredCommand,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	//
+	res_limit := &ResourceLimit{
+		CPU: 10,							// CPU limit(sec): 10sec[fixed]
+		AS: 1 * 1024 * 1024 * 1024,			// Memory limit(bytes): 1GiB[fixed]
+		FSize: 40 * 1024 * 1024,			// Process can writes a file only 40MiB[fixed]
+	}
+
+	//
+	env := proc_profile.Link.Env
+	umask := 0077	// rwx --- ---
+
+	// execute!
+	return managedExec(res_limit, bm.Pipes, args, env, umask, stdin_file_path)
 }
 
+
+//
 func (bm *BridgeMessage) run() (*ExecutedResult, error) {
 	log.Println(">> called BridgeMessage::run")
+	exec_message := bm.Message
 
-	return nil, nil
+	proc_profile := exec_message.Profile
+	stdin_file_path := exec_message.StdinFilePath
+	exec_setting := exec_message.Setting
+
+	// arguments
+	args, err := proc_profile.Run.MakeCompleteArgs(
+		exec_setting.CommandLine,
+		exec_setting.StructuredCommand,
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	//
+	res_limit := &ResourceLimit{
+		CPU: exec_setting.CpuTimeLimit,		// CPU limit(sec)
+		AS: exec_setting.MemoryBytesLimit,	// Memory limit(bytes)
+		FSize: 512 * 1024,					// Process can writes a file only 512KiB
+	}
+
+	//
+	env := proc_profile.Run.Env
+	umask := 0277	// r-x --- ---
+
+	// execute!
+	return managedExec(res_limit, bm.Pipes, args, env, umask, stdin_file_path)
 }

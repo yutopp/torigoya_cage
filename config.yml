@@ -1,4 +1,5 @@
 local_debug:
   host: "127.0.0.1"
-  port: 9099
+  port: 12321
   host_user: "yutopp"
+  lang_proc_config_dir: "${base}/test_proc_profiles"

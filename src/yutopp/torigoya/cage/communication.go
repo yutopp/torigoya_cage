@@ -1,17 +1,24 @@
 package torigoya
 
 import (
-//	"io"
-//	"encoding/binary"
-//	"bytes"
+	"net"
 	"time"
+	"strconv"
 	"fmt"
 	"log"
-	"net"
 )
 
+func makeAddress(host string, port int) string {
+	return host + ":" + strconv.Itoa(port)
+}
 
-func RunServer(laddr string, context *Context, notifier chan<-error) error {
+func RunServer(
+	host string,
+	port int,
+	context *Context,
+	notifier chan<-error,
+) error {
+	laddr := makeAddress(host, port)
 	listener, err := net.Listen("tcp", laddr)
 	if err != nil {
 		notifier <- err

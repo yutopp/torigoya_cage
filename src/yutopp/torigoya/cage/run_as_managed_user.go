@@ -16,6 +16,7 @@ import(
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 
@@ -42,13 +43,17 @@ func runAsManagedUser(
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, os.Kill, syscall.SIGKILL, syscall.SIGINT, syscall.SIGHUP)
 	defer func() {
+		if err := recover(); err != nil {
+            log.Printf("recoverd in runAsManagedUser: %v\n", err)
+        }
 		cleanupManagedUser(user_name)
 		signal.Stop(sig)
 	}()
 	go func () {
-		_ = <- sig
-		cleanupManagedUser(user_name)
-		os.Exit(-1)		// prevent call defer
+		for _ = range sig {
+			cleanupManagedUser(user_name)
+			os.Exit(-1)		// prevent call defer
+		}
 	}()
 
 	//
@@ -74,6 +79,8 @@ func cleanupManagedUser(user_name string) error {
 			succeeded = true
 			break
 		}
+
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	if !succeeded {

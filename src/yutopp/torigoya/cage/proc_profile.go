@@ -118,7 +118,7 @@ type ProcProfile struct {
 
 // ==================================================
 type ProcIndex struct {
-	Id			int
+	Id			uint64
 	Name		string
 	Runnable	bool
 	Path		string
@@ -128,7 +128,7 @@ type ProcIndexList []ProcIndex
 
 
 // ==================================================
-type ProcConfigTable map[int]ProcConfigUnit		// proc_id:config_unit
+type ProcConfigTable map[uint64]ProcConfigUnit		// proc_id:config_unit
 type ProcConfigUnit struct {
 	Index		ProcIndex
 	Versioned	map[string]ProcProfile
@@ -205,16 +205,16 @@ func globProfiles(proc_path string) (map[string]ProcProfile, error) {
 }
 
 
-func LoadProcConfigs(base_path string) (ProcConfigTable, error) {
+func LoadProcConfigs(proc_prof_base_path string) (ProcConfigTable, error) {
 	var result = make(ProcConfigTable)
 
-	index_list, err := makeProcIndexListFromPath(filepath.Join(base_path, "languages.yml"))
+	index_list, err := makeProcIndexListFromPath(filepath.Join(proc_prof_base_path, "languages.yml"))
 	if err != nil {
 		return nil, err
 	}
 
 	for _, proc_index := range index_list {
-		versioned_proc_profiles, err := globProfiles(filepath.Join(base_path, proc_index.Path))
+		versioned_proc_profiles, err := globProfiles(filepath.Join(proc_prof_base_path, proc_index.Path))
 		if err != nil {
 			return nil, err
 		}
@@ -226,4 +226,18 @@ func LoadProcConfigs(base_path string) (ProcConfigTable, error) {
 	}
 
 	return result, nil
+}
+
+func (pt *ProcConfigTable) Find(proc_id uint64, proc_version string) (*ProcProfile, error) {
+	proc_unit, ok := (*pt)[proc_id]
+	if !ok {
+		return nil, errors.New("This proc_id is not registerd")
+	}
+
+	proc_profile, ok := proc_unit.Versioned[proc_version]
+	if !ok {
+		return nil, errors.New("This proc_version is not registerd")
+	}
+
+	return &proc_profile, nil
 }

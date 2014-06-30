@@ -12,6 +12,7 @@ package torigoya
 
 import(
 	"log"
+	"fmt"
 	"time"
 	"errors"
 	"os"
@@ -21,6 +22,7 @@ import(
 )
 
 
+//
 type OutFd		int
 const (
 	StdoutFd = OutFd(0)
@@ -31,6 +33,8 @@ type StreamOutput struct {
 	Buffer		[]byte
 }
 
+
+//
 func (bm *BridgeMessage) invokeProcessCloner(
 	cloner_dir		string,
 	output_stream	chan<-StreamOutput,
@@ -113,6 +117,17 @@ func invokeProcessClonerBase(
 	stderr_c := make(chan error)
 	go readPipeAsync(stderr_pipe.ReadFd, stderr_c, StderrFd, output_stream)
 
+	//
+	defer func() {
+		// force close
+		stdout_pipe.Close()
+		stderr_pipe.Close()
+
+		// block
+		<- stdout_c
+		<- stderr_c
+	}()
+
 	// wait for finishing subprocess
 	select {
 	case err := <-process_wait_c:
@@ -132,6 +147,7 @@ func invokeProcessClonerBase(
 		result_buf, _ := readPipe(result_pipe.ReadFd)
 		result, err := DecodeExecuteResult(result_buf)
 		log.Printf("??RESULT!!!!!!! %v / %v", result, err)
+
 		return result, err
 
 	case <-time.After(500 * time.Second):
@@ -284,11 +300,48 @@ const (
 	RunMode
 )
 
+var (
+	compileFailedError	= errors.New("compile failed")
+	linkFailedError		= errors.New("link failed")
+	buildFailedError	= errors.New("build failed")
+)
 
 // ========================================
 func (ctx *Context) ExecTicket(
-	ticker				*Ticket,
+	ticket				*Ticket,
+	callback			invokeResultRecieverCallback,
 ) error {
+	// lookup language proc profile
+	proc_profile, err := ctx.procConfTable.Find(ticket.ProcId, ticket.ProcVersion)
+	if err != nil {
+		return err
+	}
+
+	//
+	if err := ctx.execManagedBuild(proc_profile, ticket.BaseName, ticket.Sources, ticket.BuildInst, callback); err != nil {
+		if err == buildFailedError {
+			return nil
+		} else {
+			return err
+		}
+	}
+	//
+
+	// run
+	errs := ctx.invokeRun(
+		ticket.BaseName,
+		proc_profile,
+		ticket.RunInst,
+		callback,
+	)
+	if errs != nil {
+		// TODO: proess error
+		for err := range errs {
+			fmt.Printf("??? %v\n", err)
+		}
+		return errors.New("ababa")
+	}
+
 	return nil
 }
 
@@ -300,92 +353,13 @@ type StreamOutputResult struct {
 
 type invokeResultRecieverCallback		func(interface{})
 
-//
-func (ctx *Context) invokeBuild(
+
+
+func (ctx *Context) mapSources(
 	base_name			string,
 	sources				[]*SourceData,
-	proc_profile		*ProcProfile,
-	build_inst			*BuildInstruction,
-	callback			invokeResultRecieverCallback,
-) error {
-	//
-	user_dir_path := ctx.makeUserDirName(base_name)
-	user_home_path := ctx.jailedUserDir
-	bin_base_path := filepath.Join(ctx.basePath, "bin")
-
-	//
-	err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
-		return ctx.invokeBuildCommand(
-			user_dir_path,
-			user_home_path,
-			bin_base_path,
-			jailed_user,
-
-			base_name,
-			sources,
-			proc_profile,
-			build_inst,
-			callback,
-		)
-	})
-
-	return err
-}
-
-func (ctx *Context) invokeRunCommand(
-	user_dir_path		string,
-	user_home_path		string,
-	bin_base_path		string,
 	jailed_user			*JailedUserInfo,
-
-	base_name			string,
-	proc_profile		*ProcProfile,
-	run_inst			*RunInstruction,
-	callback			invokeResultRecieverCallback,
 ) error {
-	log.Println(">> called invokeRunCommand")
-
-	// ========================================
-	for i, input := range run_inst.Inputs {
-		// TODO: async
-		err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
-			return ctx.invokeRunInputCommandBase(
-				user_dir_path,
-				user_home_path,
-				bin_base_path,
-				jailed_user,
-
-				base_name,
-				proc_profile,
-				&input,
-				callback,
-			)
-		})
-
-		_ = i
-		_ = err
-	}
-
-	return nil
-}
-
-
-
-
-func (ctx *Context) invokeBuildCommand(
-	user_dir_path		string,
-	user_home_path		string,
-	bin_base_path		string,
-	jailed_user			*JailedUserInfo,
-
-	base_name			string,
-	sources				[]*SourceData,
-	proc_profile		*ProcProfile,
-	build_inst			*BuildInstruction,
-	callback			invokeResultRecieverCallback,
-) error {
-	log.Println(">> called invokeBuildCommand")
-
 	// unpack source codes
 	source_contents, err := convertSourcesToContents(sources)
 	if err != nil {
@@ -398,91 +372,211 @@ func (ctx *Context) invokeBuildCommand(
 		return errors.New("couldn't create multi target : " + err.Error());
 	}
 
+	return nil
+}
+
+
+
+//
+func (ctx *Context) execManagedBuild(
+	proc_profile		*ProcProfile,
+	base_name			string,
+	sources				[]*SourceData,
+	build_inst			*BuildInstruction,
+	callback			invokeResultRecieverCallback,
+) error {
+	//
+	user_dir_path := ctx.makeUserDirName(base_name)
+	user_home_path := ctx.jailedUserDir
+	bin_base_path := filepath.Join(ctx.basePath, "bin")
+
 	//
 	if proc_profile.IsBuildRequired {
-		if build_inst == nil { return errors.New("compile_dataset is nil") }
-
-		if build_inst.CompileSetting == nil { return errors.New("build_inst.CompileSetting is nil") }
-		message := BridgeMessage{
-			ChrootPath: user_dir_path,
-			JailedUserHomePath: user_home_path,
-			JailedUser: jailed_user,
-			Message: ExecMessage{
-				Profile: proc_profile,
-				Setting: build_inst.CompileSetting,
-				Mode: CompileMode,
-			},
-			IsReboot: false,
-		}
-
-		//
-		build_output_stream := make(chan StreamOutput)
-		go func() {
-			for out := range build_output_stream {
-				log.Printf("%V\n", out)
-/*
-				if callback != nil {
-					callback(StreamOutputResult{
-						Mode: CompileMode,
-						Index: 0,
-						Output: out,
-					})
-				}
-*/
-			}
-		}()
-
-		//
-		result, err := message.invokeProcessCloner(bin_base_path, build_output_stream)
-
-		//
-		close(build_output_stream)
-		if err != nil { return err }
-		if callback != nil { callback(result) }
-
-		// if build is failed, do NOT linkng...
-		if result.IsFailed() {
-			return nil
-		}
-
-
-		if proc_profile.IsLinkIndependent {
-			// link command is separated, so call linking commands
-			if build_inst.LinkSetting == nil { return errors.New("build_inst.LinkSetting is nil") }
-			message := BridgeMessage{
-				ChrootPath: user_dir_path,
-				JailedUserHomePath: user_home_path,
-				JailedUser: jailed_user,
-				Message: ExecMessage{
-					Profile: proc_profile,
-					Setting: build_inst.LinkSetting,
-					Mode: LinkMode,
-				},
-				IsReboot: true,		// mark as to reinvoke cloner
+		// build required processor
+		if err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
+			// compile phase
+			// map files
+			if err := ctx.mapSources(base_name, sources, jailed_user); err != nil {
+				return err
 			}
 
 			//
-			link_output_stream := make(chan StreamOutput)
-			go func() {
-				for out := range link_output_stream {
-					if callback != nil {
-						callback(StreamOutputResult{
-							Mode: LinkMode,
-							Index: 0,
-							Output: out,
-						})
+			if err := ctx.invokeCompileCommand(user_dir_path, user_home_path, bin_base_path, jailed_user, proc_profile, base_name, sources, build_inst, callback); err != nil {
+				if err == compileFailedError {
+					return buildFailedError
+				} else {
+					return err
+				}
+			}
+
+			// link phase :: if  link command is separated, so call linking commands
+			if proc_profile.IsLinkIndependent {
+				if err := ctx.cleanupMountedFiles(base_name); err != nil {
+					return err
+				}
+
+				if err := ctx.invokeLinkCommand(user_dir_path, user_home_path, bin_base_path, jailed_user, proc_profile, base_name, sources, build_inst, callback); err != nil {
+					if err == linkFailedError {
+						return buildFailedError
+					} else {
+						return err
 					}
 				}
-			}()
+			}
 
-			//
-			result, err := message.invokeProcessCloner(bin_base_path, link_output_stream)
+			return nil
 
-			//
-			close(link_output_stream)
-			if err != nil { return err }
-			if callback != nil { callback(result) }
+		}); err != nil {
+			return err
 		}
+	}
+
+	return nil
+}
+
+func (ctx *Context) invokeRun(
+	base_name			string,
+	proc_profile		*ProcProfile,
+	run_inst			*RunInstruction,
+	callback			invokeResultRecieverCallback,
+) []error {
+	log.Println(">> called invokeRunCommand")
+
+	//
+	user_dir_path := ctx.makeUserDirName(base_name)
+	user_home_path := ctx.jailedUserDir
+	bin_base_path := filepath.Join(ctx.basePath, "bin")
+
+	//
+	var errs []error = nil
+	// ========================================
+	for index, input := range run_inst.Inputs {
+		// TODO: async
+		err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
+			return ctx.invokeRunInputCommandBase(
+				user_dir_path,
+				user_home_path,
+				bin_base_path,
+				jailed_user,
+
+				base_name,
+				proc_profile,
+				index,
+				&input,
+				callback,
+			)
+		})
+
+		if err != nil {
+			if errs == nil { errs = make([]error, 0) }
+			errs = append(errs, err)
+		}
+	}
+
+	return errs
+}
+
+
+
+
+
+
+func (ctx *Context) invokeCompileCommand(
+	user_dir_path		string,
+	user_home_path		string,
+	bin_base_path		string,
+	jailed_user			*JailedUserInfo,
+	proc_profile		*ProcProfile,
+	base_name			string,
+	sources				[]*SourceData,
+	build_inst			*BuildInstruction,
+	callback			invokeResultRecieverCallback,
+) error {
+	log.Println(">> called invokeCompileCommand")
+
+	if build_inst == nil { return errors.New("compile_dataset is nil") }
+	if build_inst.CompileSetting == nil {
+		return errors.New("build_inst.CompileSetting is nil")
+	}
+
+	//
+	message := BridgeMessage{
+		ChrootPath: user_dir_path,
+		JailedUserHomePath: user_home_path,
+		JailedUser: jailed_user,
+		Message: ExecMessage{
+			Profile: proc_profile,
+			Setting: build_inst.CompileSetting,
+			Mode: CompileMode,
+		},
+		IsReboot: false,
+	}
+
+	//
+	build_output_stream := make(chan StreamOutput)
+	go sendResultToCallback(callback, build_output_stream, CompileMode, 0)
+
+	//
+	result, err := message.invokeProcessCloner(bin_base_path, build_output_stream)
+
+	//
+	close(build_output_stream)
+	if err != nil { return err }
+	if callback != nil { callback(result) }
+
+	if result.IsFailed() {
+		return compileFailedError
+	}
+
+	return nil
+}
+
+func (ctx *Context) invokeLinkCommand(
+	user_dir_path		string,
+	user_home_path		string,
+	bin_base_path		string,
+	jailed_user			*JailedUserInfo,
+	proc_profile		*ProcProfile,
+	base_name			string,
+	sources				[]*SourceData,
+	build_inst			*BuildInstruction,
+	callback			invokeResultRecieverCallback,
+) error {
+	log.Println(">> called invokeLinkCommand")
+
+	//
+	if build_inst == nil { return errors.New("compile_dataset is nil") }
+	if build_inst.LinkSetting == nil {
+		return errors.New("build_inst.LinkSetting is nil")
+	}
+
+	//
+	message := BridgeMessage{
+		ChrootPath: user_dir_path,
+		JailedUserHomePath: user_home_path,
+		JailedUser: jailed_user,
+		Message: ExecMessage{
+			Profile: proc_profile,
+			Setting: build_inst.LinkSetting,
+			Mode: LinkMode,
+		},
+		IsReboot: false,
+	}
+
+	//
+	link_output_stream := make(chan StreamOutput)
+	go sendResultToCallback(callback, link_output_stream, LinkMode, 0)
+
+	//
+	result, err := message.invokeProcessCloner(bin_base_path, link_output_stream)
+
+	//
+	close(link_output_stream)
+	if err != nil { return err }
+	if callback != nil { callback(result) }
+
+	if result.IsFailed() {
+		return linkFailedError
 	}
 
 	return nil
@@ -497,6 +591,7 @@ func (ctx *Context) invokeRunInputCommandBase(
 
 	base_name			string,
 	proc_profile		*ProcProfile,
+	index				int,
 	input				*Input,
 	callback			invokeResultRecieverCallback,
 ) error {
@@ -504,10 +599,11 @@ func (ctx *Context) invokeRunInputCommandBase(
 
 	// TODO: add lock
 	// reassign base files to new user
-	user_dir_path, input_paths, err := ctx.reassignTarget(
+	user_dir_path, input_path, err := ctx.reassignTarget(
 		base_name,
+		jailed_user.UserId,
 		jailed_user.GroupId,
-		func(base_directory_name string) ([]string, error) {
+		func(base_directory_name string) (*string, error) {
 			if input.stdin != nil {
 				// stdin exists
 
@@ -517,7 +613,7 @@ func (ctx *Context) invokeRunInputCommandBase(
 
 				path, err := ctx.createInput(base_directory_name, jailed_user.GroupId, stdin_content)
 				if err != nil { return nil, err }
-				return []string{ path }, nil
+				return &path, nil
 
 			} else {
 				// nothing to do
@@ -530,8 +626,14 @@ func (ctx *Context) invokeRunInputCommandBase(
 	//
 	var stdin_path *string = nil
 	if input.stdin != nil {
-		if len(input_paths) != 1 { return errors.New("invalid stdin file") }
-		stdin_path = &input_paths[0]
+		if input_path == nil { return errors.New("invalid stdin file") }
+
+		// adjust path to jailed env
+		real_user_home_path := filepath.Join(user_dir_path, user_home_path)
+		stdin_path_val, err := filepath.Rel(real_user_home_path, *input_path)
+		if err != nil {}
+
+		stdin_path = &stdin_path_val
 	}
 
 	//
@@ -547,11 +649,37 @@ func (ctx *Context) invokeRunInputCommandBase(
 		},
 		IsReboot: false,
 	}
+
+	//
 	run_output_stream := make(chan StreamOutput)
+	go sendResultToCallback(callback, run_output_stream, RunMode, index)
+
+	//
 	result, err := message.invokeProcessCloner(bin_base_path, run_output_stream)
+
+	//
 	close(run_output_stream)
 	if err != nil { return err }
-	_ = result
+	if callback != nil { callback(result) }
 
 	return nil
+}
+
+
+
+func sendResultToCallback(
+	callback			invokeResultRecieverCallback,
+	output_stream		chan StreamOutput,
+	mode				int,
+	index				int,
+) {
+	for out := range output_stream {
+		if callback != nil {
+			callback(StreamOutputResult{
+				Mode: mode,
+				Index: index,
+				Output: out,
+			})
+		}
+	}
 }

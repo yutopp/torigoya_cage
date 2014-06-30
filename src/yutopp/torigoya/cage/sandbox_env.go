@@ -102,7 +102,7 @@ func buildChrootEnv(
 		// mount system's
 		for _, host_mount_name := range readOnlyMounts {
 			if !fileExists(host_mount_name) {
-				log.Printf("system dir %s is not existed on host machine\n", host_mount_name)
+				log.Printf("NOT mounted: system dir %s is not existed on host machine\n", host_mount_name)
 				continue
 			}
 
@@ -120,7 +120,7 @@ func buildChrootEnv(
 				"",
 			)
 
-			println(host_mount_name)
+			log.Printf("mounted: %s\n", host_mount_name)
 		}
 
 

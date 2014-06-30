@@ -10,9 +10,10 @@ package torigoya
 
 import (
 	"testing"
+	"net"
 	"os"
 	"fmt"
-	"net"
+	"path/filepath"
 
 	"github.com/ugorji/go/codec"
 )
@@ -39,13 +40,13 @@ func TestProtocol(t *testing.T) {
 
 func TestProtocolServer(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath)
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
 	if err != nil {
 		t.Fatalf(err.Error())
 	}
 
 	e := make(chan error)
-	go RunServer(":12321", ctx, e)
+	go RunServer("", 12321, ctx, e)
 	if err := <- e; err != nil {
 		t.Fatal(err)
 	}
