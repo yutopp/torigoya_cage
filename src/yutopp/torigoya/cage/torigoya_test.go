@@ -50,6 +50,31 @@ func TestCreateTarget(t *testing.T) {
 }
 
 
+func TestCreateTargetRepeat(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	base_name := "aaa" + strconv.FormatInt(time.Now().Unix(), 10)
+	content := &TextContent{
+		"prog.cpp",
+		[]byte("test test test"),
+	}
+	group_id := 1000
+
+	for i:=0; i<2; i++ {
+		if _, err := ctx.createTarget(base_name, group_id, content); err != nil {
+			t.Fatalf(err.Error())
+		}
+	}
+}
+
+
+
+
 func TestReassignTarget(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
@@ -346,6 +371,9 @@ func TestTicket(t *testing.T) {
 
 int main() {
 	std::cout << "hello!" << std::endl;
+	int i;
+	std::cin >> i;
+	std::cout << "input is " << i << std::endl;
 }
 `),
 			false,
@@ -374,6 +402,18 @@ int main() {
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
+
+			Input{
+				stdin: &SourceData{
+					"hoge.in",
+					[]byte("100"),
+					false,
+				},
+				setting: &ExecutionSetting{
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
 		},
 	}
 
@@ -387,12 +427,122 @@ int main() {
 		RunInst: run_inst,
 	}
 
-	f := func(v interface{}) {
-		t.Logf("%V", v)
-	}
-
+	// execute
+	var result test_result
+	result.run = make(map[int]*test_result_unit)
+	f := makehelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
 		return
+	}
+
+	t.Logf("%V", result)
+
+	//
+	expect_result := test_result{
+		compile: test_result_unit{
+		},
+		link: test_result_unit{
+		},
+		run: map[int]*test_result_unit{
+		0: &test_result_unit{
+			out: "hello!\ninput is 0\n",
+		},
+		1: &test_result_unit{
+			out: "hello!\ninput is 100\n",
+		},
+		},
+	}
+
+	//
+	assertTestResult(t, &result, &expect_result)
+}
+
+func assertTestResult(t *testing.T, result, expect *test_result) {
+	assertUnit := func (tag string, result, expect *test_result_unit) {
+		if expect.out != result.out {
+			t.Fatalf("[%s / out] Expect(%s) but returned(%s)", tag, expect.out, result.out)
+		}
+
+		if expect.err != result.err {
+			t.Fatalf("[%s / err] Expect(%s) but returned(%s)", tag, expect.err, result.err)
+		}
+	}
+
+	assertUnit("compile", &result.compile, &expect.compile)
+	assertUnit("link", &result.link, &expect.link)
+
+	checked := make(map[int]bool)
+	for key, result_unit := range result.run {
+		expect_unit, ok := expect.run[key]
+		if !ok {
+			t.Fatalf("Unexpected key(%d)", key)
+		}
+		assertUnit(fmt.Sprintf("run:%d", key), result_unit, expect_unit)
+		checked[key] = true
+	}
+
+	for key, _ := range expect.run {
+		if _, ok := checked[key]; !ok {
+			t.Fatalf("The key(%d) was not checked", key)
+		}
+	}
+}
+
+type test_result_unit struct {
+	out, err	string
+	result		*ExecutedResult
+}
+type test_result struct {
+	compile, link	test_result_unit
+	run				map[int]*test_result_unit
+}
+
+func makehelperCallback(result *test_result) func(v interface{}) {
+	return func(v interface{}) {
+		switch v.(type) {
+		case StreamExecutedResult:
+			r := v.(StreamExecutedResult)
+			switch r.Mode {
+			case CompileMode:
+				result.compile.result = r.Result
+			case LinkMode:
+				result.link.result = r.Result
+			case RunMode:
+				if result.run[r.Index] == nil { result.run[r.Index] = &test_result_unit{} }
+				result.run[r.Index].result = r.Result
+			}
+
+		case StreamOutputResult:
+			r := v.(StreamOutputResult)
+			switch r.Mode {
+			case CompileMode:
+				switch r.Output.Fd {
+				case StdoutFd:
+					result.compile.out = result.compile.out + string(r.Output.Buffer)
+				case StderrFd:
+					result.compile.err = result.compile.err + string(r.Output.Buffer)
+				}
+
+			case LinkMode:
+				switch r.Output.Fd {
+				case StdoutFd:
+					result.link.out = result.link.out + string(r.Output.Buffer)
+				case StderrFd:
+					result.link.err = result.link.err + string(r.Output.Buffer)
+				}
+
+			case RunMode:
+				if result.run[r.Index] == nil { result.run[r.Index] = &test_result_unit{} }
+				switch r.Output.Fd {
+				case StdoutFd:
+					result.run[r.Index].out = result.run[r.Index].out + string(r.Output.Buffer)
+				case StderrFd:
+					result.run[r.Index].err = result.run[r.Index].err + string(r.Output.Buffer)
+				}
+			}
+		default:
+			panic("unsupported type.");
+		}
 	}
 }

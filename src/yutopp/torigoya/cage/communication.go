@@ -54,7 +54,7 @@ func handleConnection(c net.Conn, context *Context) {
 
 	// set timeout at the first time
 	c.SetReadDeadline(time.Now().Add(10 * time.Second))
-	kind, data, err := handler.Read(c)
+	kind, data, err := handler.read(c)
 	if err != nil {
 		handler.WriteError(c, fmt.Sprintf("Reciever error(%v)", err))
 		return
@@ -63,15 +63,28 @@ func handleConnection(c net.Conn, context *Context) {
 	// switch process by kind
 	switch kind {
 	case HeaderRequest:
-		if err := handler.WriteRequest(c, "aba"); err != nil {
-			log.Printf("Server / Error: %v\n", err)
-		}
-		fmt.Printf("data %V\n", data)
+		fmt.Printf("Server::Recieved %V\n", data)
 		ticket, err := MakeTicketFromTuple(data)
 		if err != nil {
-			fmt.Printf("dame %V\n", err)
+			fmt.Printf("Server::Invalid request (%s)\n", err.Error())
+			handler.WriteError(c, fmt.Sprintf("Invalid request (%s)", err.Error()))
+			break
 		}
 		fmt.Printf("ticket %V\n", ticket)
+
+		f := func(v interface{}) {
+			switch v.(type) {
+			case StreamExecutedResult:
+			case StreamOutputResult:
+			}
+		}
+		if err := context.ExecTicket(ticket, f); err != nil {
+			fmt.Printf("Server::Failed to exec ticket (%s)\n", err.Error())
+			handler.WriteError(c, fmt.Sprintf("Failed to exec ticket (%s)", err.Error()))
+			break
+		}
+
+		handler.WriteExit(c)
 
 	default:
 		handler.WriteError(c, fmt.Sprintf("Server can accept only 'Request' messages"))

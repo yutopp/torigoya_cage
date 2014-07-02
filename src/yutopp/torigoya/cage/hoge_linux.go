@@ -173,9 +173,14 @@ func readPipeAsync(fd int, cs chan<-error, output_fd OutFd, output_stream chan<-
 			log.Printf("= %d ==> %d", fd, size)
 			log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[:size]))
 
+			//
+			copied := make([]byte, size)
+			copy(copied, buffer[:size])
+
+			//
 			output_stream <- StreamOutput{
 				Fd: output_fd,
-				Buffer: buffer[:size],
+				Buffer: copied,
 			}
 		}
 	}
@@ -345,35 +350,23 @@ func (ctx *Context) ExecTicket(
 	return nil
 }
 
+//
 type StreamOutputResult struct {
 	Mode		int
 	Index		int
-	Output		StreamOutput
+	Output		*StreamOutput
 }
 
+type StreamExecutedResult struct {
+	Mode		int
+	Index		int
+	Result		*ExecutedResult
+}
 type invokeResultRecieverCallback		func(interface{})
 
 
 
-func (ctx *Context) mapSources(
-	base_name			string,
-	sources				[]*SourceData,
-	jailed_user			*JailedUserInfo,
-) error {
-	// unpack source codes
-	source_contents, err := convertSourcesToContents(sources)
-	if err != nil {
-		return err
-	}
 
-	//
-	_, err = ctx.createMultipleTargets(base_name, jailed_user.GroupId, source_contents)
-	if err != nil {
-		return errors.New("couldn't create multi target : " + err.Error());
-	}
-
-	return nil
-}
 
 
 
@@ -409,7 +402,7 @@ func (ctx *Context) execManagedBuild(
 				}
 			}
 
-			// link phase :: if  link command is separated, so call linking commands
+			// link phase :: if link command is separated, so call linking commands
 			if proc_profile.IsLinkIndependent {
 				if err := ctx.cleanupMountedFiles(base_name); err != nil {
 					return err
@@ -514,7 +507,7 @@ func (ctx *Context) invokeCompileCommand(
 
 	//
 	build_output_stream := make(chan StreamOutput)
-	go sendResultToCallback(callback, build_output_stream, CompileMode, 0)
+	go sendOutputToCallback(callback, build_output_stream, CompileMode, 0)
 
 	//
 	result, err := message.invokeProcessCloner(bin_base_path, build_output_stream)
@@ -522,7 +515,7 @@ func (ctx *Context) invokeCompileCommand(
 	//
 	close(build_output_stream)
 	if err != nil { return err }
-	if callback != nil { callback(result) }
+	sendResultToCallback(callback, result, CompileMode, 0)
 
 	if result.IsFailed() {
 		return compileFailedError
@@ -565,7 +558,7 @@ func (ctx *Context) invokeLinkCommand(
 
 	//
 	link_output_stream := make(chan StreamOutput)
-	go sendResultToCallback(callback, link_output_stream, LinkMode, 0)
+	go sendOutputToCallback(callback, link_output_stream, LinkMode, 0)
 
 	//
 	result, err := message.invokeProcessCloner(bin_base_path, link_output_stream)
@@ -573,7 +566,7 @@ func (ctx *Context) invokeLinkCommand(
 	//
 	close(link_output_stream)
 	if err != nil { return err }
-	if callback != nil { callback(result) }
+	sendResultToCallback(callback, result, LinkMode, 0)
 
 	if result.IsFailed() {
 		return linkFailedError
@@ -652,7 +645,7 @@ func (ctx *Context) invokeRunInputCommandBase(
 
 	//
 	run_output_stream := make(chan StreamOutput)
-	go sendResultToCallback(callback, run_output_stream, RunMode, index)
+	go sendOutputToCallback(callback, run_output_stream, RunMode, index)
 
 	//
 	result, err := message.invokeProcessCloner(bin_base_path, run_output_stream)
@@ -660,14 +653,34 @@ func (ctx *Context) invokeRunInputCommandBase(
 	//
 	close(run_output_stream)
 	if err != nil { return err }
-	if callback != nil { callback(result) }
+	sendResultToCallback(callback, result, RunMode, index)
 
 	return nil
 }
 
 
+func (ctx *Context) mapSources(
+	base_name			string,
+	sources				[]*SourceData,
+	jailed_user			*JailedUserInfo,
+) error {
+	// unpack source codes
+	source_contents, err := convertSourcesToContents(sources)
+	if err != nil {
+		return err
+	}
 
-func sendResultToCallback(
+	//
+	_, err = ctx.createMultipleTargets(base_name, jailed_user.GroupId, source_contents)
+	if err != nil {
+		return errors.New("couldn't create multi target : " + err.Error());
+	}
+
+	return nil
+}
+
+
+func sendOutputToCallback(
 	callback			invokeResultRecieverCallback,
 	output_stream		chan StreamOutput,
 	mode				int,
@@ -678,8 +691,23 @@ func sendResultToCallback(
 			callback(StreamOutputResult{
 				Mode: mode,
 				Index: index,
-				Output: out,
+				Output: &out,
 			})
 		}
+	}
+}
+
+func sendResultToCallback(
+	callback			invokeResultRecieverCallback,
+	result				*ExecutedResult,
+	mode				int,
+	index				int,
+) {
+	if callback != nil {
+		callback(StreamExecutedResult{
+			Mode: mode,
+			Index: index,
+			Result: result,
+		})
 	}
 }

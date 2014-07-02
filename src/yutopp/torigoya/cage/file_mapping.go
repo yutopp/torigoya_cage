@@ -84,7 +84,7 @@ func (ctx *Context) createMultipleTargets(
 
 	//
 	if !fileExists(ctx.sandboxDir) {
-		panic(fmt.Sprintf("directory %s is not existed", ctx.sandboxDir))
+		return nil, errors.New(fmt.Sprintf("directory %s is not existed", ctx.sandboxDir))
 	}
 
 	// ========================================
@@ -96,8 +96,9 @@ func (ctx *Context) createMultipleTargets(
 	//
 	if fileExists(user_dir_path) {
 		log.Printf("user directory %s is already existed, so remove them\n", user_dir_path)
-		// TODO:
-		umountAll(user_dir_path)
+		if err := umountAll(user_dir_path); err != nil {
+			return nil, errors.New(fmt.Sprintf("Couldn't unmount directory %s (%s)", user_dir_path, err))
+		}
 		if err := os.RemoveAll(user_dir_path); err != nil {
 			return nil, errors.New(fmt.Sprintf("Couldn't remove directory %s (%s)", user_dir_path, err))
 		}
@@ -273,9 +274,10 @@ func (ctx *Context) cleanupMountedFiles(
 		if err != nil { return err }
 
 		if rel_dir != ctx.homeDir {
-			umountAll(dir)
-			err := os.RemoveAll(dir)
-			if err != nil {
+			if err := umountAll(dir); err != nil {
+				return errors.New(fmt.Sprintf("Couldn't unmount directory %s (%s)", user_dir_path, err))
+			}
+			if err := os.RemoveAll(dir); err != nil {
 				return errors.New(fmt.Sprintf("Couldn't remove directory %s (%s)", dir, err))
 			}
 		}
@@ -306,7 +308,7 @@ func (ctx *Context) createInput(
 	if !fileExists(inputs_dir_path) {
 		err := os.Mkdir(inputs_dir_path, os.ModeDir)
 		if err != nil {
-			panic(fmt.Sprintf("Couldn't create directory %s", inputs_dir_path))
+			return "", errors.New(fmt.Sprintf("Couldn't create directory %s", inputs_dir_path))
 		}
 	}
 	// host_user_id:managed_group_id // rwx/---/---
@@ -316,21 +318,22 @@ func (ctx *Context) createInput(
 
 	//
 	stdin_full_path = filepath.Join(inputs_dir_path, stdin.Name)
-	f, err := os.OpenFile(stdin_full_path, os.O_WRONLY|os.O_CREATE, 0600)
+	f, err := os.OpenFile(stdin_full_path, os.O_WRONLY|os.O_CREATE, 0440)	// r--/r--/---
 	if err != nil {
 		return "", err
 	}
 	defer func() {
  		f.Close()
-		// host_user_id:managed_group_id // r--/---/---
-		err = guardPath(stdin_full_path, host_user_id, managed_group_id, 0400)
+		// host_user_id:managed_group_id // r--/r--/---
+		err = guardPath(stdin_full_path, host_user_id, managed_group_id, 0440)
 	}()
 	if _, err := f.Write(stdin.Data); err != nil {
 		return "", err
 	}
 
-	// host_user_id:managed_group_id // r-x/---/---
-	if err := guardPath(inputs_dir_path, host_user_id, managed_group_id, 0500); err != nil {
+	// change input DIR permission
+	// host_user_id:managed_group_id // r-x/r-x/---
+	if err := guardPath(inputs_dir_path, host_user_id, managed_group_id, 0550); err != nil {
 		return "", err
 	}
 
@@ -364,11 +367,32 @@ func guardPath(file_path string, user_id int, group_id int, mode os.FileMode) er
 }
 
 
-func umountAll(dir_name string) error {
-	umount_command := exec.Command("umount", "--recursive", "--force", dir_name)
-	if err := umount_command.Run(); err != nil {
-		return errors.New("Failed to umount : " + err.Error())
+func mountpoint(dir_name string) bool {
+	mountpoint_command := exec.Command("mountpoint", dir_name)
+	if err := mountpoint_command.Run(); err != nil {
+		fmt.Printf("= mount point >> %s\n", err.Error())
+		return false
 	}
 
-	return nil
+	return true
+}
+
+func umountAll(dir_name string) error {
+	err := filepath.Walk(dir_name, func(path string, info os.FileInfo, err error) error {
+		if err != nil { return err }
+		if info.IsDir() {
+			fmt.Printf("=>> %s\n", path)
+			if mountpoint(path) {
+				fmt.Printf("= TRY TO UNMOUNT >> %s\n", path)
+				umount_command := exec.Command("umount", "--force", path)
+				if err := umount_command.Run(); err != nil {
+					return errors.New("Failed to umount : " + err.Error())
+				}
+			}
+		}
+
+		return nil
+	})
+
+	return err
 }

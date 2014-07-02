@@ -50,8 +50,7 @@ func EncodeToTorigoyaProtocol(header int8, data interface{}) ([]byte, error) {
 
 	// make header(1Bytes)
 	if header < HeaderIndexBegin || header > HeaderIndexEnd {
-		fmt.Printf("ababa %d", header)
-		return nil, errors.New("Failed to write data")
+		return nil, errors.New(fmt.Sprintf("Failed to write data / invalid header %d", header))
 	}
 	if err := binary.Write(buf, binary.LittleEndian, header); err != nil { return nil, err }
 
@@ -61,8 +60,6 @@ func EncodeToTorigoyaProtocol(header int8, data interface{}) ([]byte, error) {
 	if err := enc.Encode(&data); err != nil {
 		return nil, err
 	}
-
-	log.Printf("encode: data: %v\n", data)
 
 	// length
 	length := uint32(len(msgpack_bytes))
@@ -87,7 +84,7 @@ type ProtocolHandler struct {
 	buffer			[]byte
 }
 
-func (ph *ProtocolHandler) Read(reader io.Reader) (uint8, interface{}, error) {
+func (ph *ProtocolHandler) read(reader io.Reader) (uint8, interface{}, error) {
 	// read protocol
 	n, err := reader.Read(ph.header_buffer[:])
 	if err != nil { return HeaderInvalid, nil, err }
@@ -148,11 +145,15 @@ func (ph *ProtocolHandler) write(writer io.Writer, header int8, data interface{}
 	return nil
 }
 
-func (ph *ProtocolHandler) WriteRequest(writer io.Writer, message string) error {
+func (ph *ProtocolHandler) WriteRequest(writer io.Writer, message *Ticket) error {
 	return ph.write(writer, HeaderRequest, message)
 }
 
 
 func (ph *ProtocolHandler) WriteError(writer io.Writer, message string) error {
 	return ph.write(writer, HeaderResult, message)
+}
+
+func (ph *ProtocolHandler) WriteExit(writer io.Writer) error {
+	return ph.write(writer, HeaderExit, "")
 }

@@ -15,9 +15,9 @@ import "C"
 
 import(
 	"bytes"
+	"strings"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 	"os"
 	"os/exec"
@@ -87,24 +87,71 @@ func managedExec(
 		//
 		select {
 		case ps := <-wait_pid_chan:
+			// toke status
+
+			//
 			usage, ok := ps.SysUsage().(*syscall.Rusage)
 			if !ok {
-				log.Fatal("akann")
+				return nil, errors.New("failed to cast to *syscall.Rusage")
 			}
 			fmt.Printf("%v\n", usage)
-
-			// usage.Maxrss -> Amount of memory usage (KB)
 
 			// error check sequence
 			error_buf := make([]byte, 128)
 			error_len, _ := syscall.Read(error_pipe.ReadFd, error_buf)
 			if error_len < len(errorSequence) {
 				// execution was succeeded
+				wait_status, ok := ps.Sys().(syscall.WaitStatus)
+				if !ok {
+					return nil, errors.New("failed to cast to syscall.WaitStatus")
+				}
 
-				// TODO: check exit status code
+				// take signal
+				signal := func() *syscall.Signal {
+					switch {
+					case wait_status.Signaled():
+						s := wait_status.Signal()
+						return &s
+						/*
+					case wait_status.Stopped():
+						return wait_status.StopSignal()
+*/
+					default:
+						return nil
+					}
+				}()
 
+				// exit status
+				return_code := wait_status.ExitStatus()
+
+				// take status
+				status := func() ExecutedStatus {
+					if ps.Success() {
+						return Passed
+					} else {
+						return Error
+					}
+				}()
+
+				// cPU time
+				user_time := usage.Utime
+				system_time := usage.Stime
+
+				cpu_time := float32(user_time.Nano()) / 1e9 + float32(system_time.Nano()) / 1e9
+
+				// Memory usage
+				// usage.Maxrss -> Amount of memory usage (KB)
+				// TODO: fix it
+				memory := uint64(usage.Maxrss * 1024)
+
+				// make result
 				return &ExecutedResult{
-					Status: Passed,
+					UsedCPUTimeSec: cpu_time,
+					UsedMemoryBytes: memory,
+					Signal: signal,
+					ReturnCode: return_code,
+					CommandLine: strings.Join(args, " "),
+					Status: status,
 				}, nil
 
 			} else {
@@ -177,7 +224,16 @@ func managedExecChild(
 	//
 	syscall.Umask(umask)
 
-	// TODO: stdin
+	// redirect stdin
+	if stdin_file_path != nil {
+		fmt.Printf("============= stdin (%v)\n", *stdin_file_path)
+		file, err := os.Open(*stdin_file_path)	// read
+		if err != nil { panic(err) }
+		defer file.Close()
+
+		//
+		if err := syscall.Dup2(int(file.Fd()), 0); err != nil { panic(err) }
+	}
 
 	// redirect stdout
 	if err := syscall.Close(p.Stdout.ReadFd); err != nil { panic(err) }

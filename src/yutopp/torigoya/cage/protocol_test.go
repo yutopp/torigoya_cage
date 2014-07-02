@@ -14,6 +14,8 @@ import (
 	"os"
 	"fmt"
 	"path/filepath"
+	"time"
+	"strconv"
 
 	"github.com/ugorji/go/codec"
 )
@@ -57,18 +59,92 @@ func TestProtocolServer(t *testing.T) {
 		// handle error
 	}
 
+
+
+	//
+	base_name := "aaa6" + strconv.FormatInt(time.Now().Unix(), 10)
+
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
+#include <iostream>
+
+int main() {
+	std::cout << "hello!" << std::endl;
+	int i;
+	std::cin >> i;
+	std::cout << "input is " << i << std::endl;
+}
+`),
+			false,
+		},
+	}
+
+	//
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+	}
+
+	//
+	run_inst := &RunInstruction{
+		Inputs: []Input{
+			Input{
+				stdin: nil,
+				setting: &ExecutionSetting{
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
+
+			Input{
+				stdin: &SourceData{
+					"hoge.in",
+					[]byte("100"),
+					false,
+				},
+				setting: &ExecutionSetting{
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
+		},
+	}
+
+	//
+	ticket := &Ticket{
+		BaseName: base_name,
+		ProcId: 0,
+		ProcVersion: "test",
+		Sources: sources,
+		BuildInst: build_inst,
+		RunInst: run_inst,
+	}
+
+
+
+
+
 	//
 	var handler ProtocolHandler
 
 	// request
-	if err := handler.WriteRequest(conn, "aba"); err != nil {
+	if err := handler.WriteRequest(conn, ticket); err != nil {
 		t.Fatalf("server recv: %v\n", err)
 	}
 
 
 	//
 	for {
-		kind, data, err := handler.Read(conn)
+		kind, data, err := handler.read(conn)
 		if err != nil {
 			t.Fatalf("client error: %v\n", err)
 			break

@@ -9,6 +9,8 @@
 package torigoya
 
 import(
+	"syscall"
+
 	"github.com/ugorji/go/codec"
 )
 
@@ -29,7 +31,7 @@ const (
 type ExecutedResult struct {
 	UsedCPUTimeSec		float32
 	UsedMemoryBytes		uint64
-	Signal				int
+	Signal				*syscall.Signal
 	ReturnCode			int
 	CommandLine			string
 	Status				ExecutedStatus
@@ -37,8 +39,7 @@ type ExecutedResult struct {
 }
 
 func (bm *ExecutedResult) IsFailed() bool {
-	// TODO: implement
-	return false;
+	return bm.Status != Passed;
 }
 
 func (bm *ExecutedResult) Encode() ([]byte, error) {

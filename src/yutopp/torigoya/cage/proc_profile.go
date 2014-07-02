@@ -78,7 +78,7 @@ func (pd *PhaseDetail) MakeCompleteArgs(
 
 func (pd *PhaseDetail) isValidOption(selected_option []string) error {
 	if !( len(selected_option) == 1 || len(selected_option) == 2 ) {
-		return errors.New(fmt.Sprintf("length of the option should be 1 or 2 (but %d)", len(selected_option)))
+		return errors.New(fmt.Sprintf("isValidOption::length of the option should be 1 or 2 (but %d)", len(selected_option)))
 	}
 
 	if val,ok := pd.AllowedCommandLine[selected_option[0]]; ok {
@@ -89,7 +89,7 @@ func (pd *PhaseDetail) isValidOption(selected_option []string) error {
 					return nil
 				}
 			}
-			return errors.New(fmt.Sprintf("value(%s) was not found in key(%s)", selected_option[1], selected_option[0]))
+			return errors.New(fmt.Sprintf("isValidOption::value(%s) was not found in key(%s)", selected_option[1], selected_option[0]))
 
 		} else {
 			// selected option is only key
@@ -97,12 +97,12 @@ func (pd *PhaseDetail) isValidOption(selected_option []string) error {
 				return nil
 
 			} else {
-				return errors.New("nil value can not be selected")
+				return errors.New("isValidOption::nil value can not be selected")
 			}
 		}
 
 	} else {
-		return errors.New(fmt.Sprintf("key(%s) was not found", selected_option[0]))
+		return errors.New(fmt.Sprintf("isValidOption::key(%s) was not found", selected_option[0]))
 	}
 }
 
