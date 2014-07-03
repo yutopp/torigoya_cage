@@ -137,23 +137,34 @@ func (ph *ProtocolHandler) write(writer io.Writer, header int8, data interface{}
 	if err != nil {
 		return err
 	}
-
 	if n != len(buf) {
-		return errors.New("")
+		return errors.New("couldn't send all bytes")
 	}
 
 	return nil
 }
 
+// TODO: remove
 func (ph *ProtocolHandler) WriteRequest(writer io.Writer, message *Ticket) error {
 	return ph.write(writer, HeaderRequest, message)
 }
 
-
-func (ph *ProtocolHandler) WriteError(writer io.Writer, message string) error {
-	return ph.write(writer, HeaderResult, message)
+//
+func (ph *ProtocolHandler) WriteOutputResult(writer io.Writer, r *StreamOutputResult) error {
+	return ph.write(writer, HeaderOutputs, r.ToTuple())
 }
 
+//
+func (ph *ProtocolHandler) WriteExecutedResult(writer io.Writer, r *StreamExecutedResult) error {
+	return ph.write(writer, HeaderResult, r.ToTuple())
+}
+
+//
+func (ph *ProtocolHandler) WriteSystemError(writer io.Writer, message string) error {
+	return ph.write(writer, HeaderSystemError, message)
+}
+
+//
 func (ph *ProtocolHandler) WriteExit(writer io.Writer) error {
 	return ph.write(writer, HeaderExit, "")
 }

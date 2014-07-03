@@ -33,6 +33,9 @@ type StreamOutput struct {
 	Buffer		[]byte
 }
 
+func (s *StreamOutput) ToTuple() []interface{} {
+	return []interface{}{ s.Fd, s.Buffer }
+}
 
 //
 func (bm *BridgeMessage) invokeProcessCloner(
@@ -350,6 +353,7 @@ func (ctx *Context) ExecTicket(
 	return nil
 }
 
+
 //
 type StreamOutputResult struct {
 	Mode		int
@@ -357,11 +361,23 @@ type StreamOutputResult struct {
 	Output		*StreamOutput
 }
 
+func (r *StreamOutputResult) ToTuple() []interface{} {
+	return []interface{}{ r.Mode, r.Index, r.Output.ToTuple() }
+}
+
+
+//
 type StreamExecutedResult struct {
 	Mode		int
 	Index		int
 	Result		*ExecutedResult
 }
+func (r *StreamExecutedResult) ToTuple() []interface{} {
+	return []interface{}{ r.Mode, r.Index, r.Result.ToTuple() }
+}
+
+
+//
 type invokeResultRecieverCallback		func(interface{})
 
 
@@ -688,7 +704,7 @@ func sendOutputToCallback(
 ) {
 	for out := range output_stream {
 		if callback != nil {
-			callback(StreamOutputResult{
+			callback(&StreamOutputResult{
 				Mode: mode,
 				Index: index,
 				Output: &out,
@@ -704,7 +720,7 @@ func sendResultToCallback(
 	index				int,
 ) {
 	if callback != nil {
-		callback(StreamExecutedResult{
+		callback(&StreamExecutedResult{
 			Mode: mode,
 			Index: index,
 			Result: result,

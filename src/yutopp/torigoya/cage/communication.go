@@ -4,6 +4,7 @@ import (
 	"net"
 	"time"
 	"strconv"
+	"errors"
 	"fmt"
 	"log"
 )
@@ -46,49 +47,110 @@ func RunServer(
 
 
 func handleConnection(c net.Conn, context *Context) {
-	//
-	defer c.Close()
-
-	//
 	var handler ProtocolHandler
+	log.Printf("Server connection %v\n", c)
 
-	// set timeout at the first time
-	c.SetReadDeadline(time.Now().Add(10 * time.Second))
-	kind, data, err := handler.read(c)
-	if err != nil {
-		handler.WriteError(c, fmt.Sprintf("Reciever error(%v)", err))
-		return
-	}
+	//
+	defer func() {
+		//
+		if i := recover(); i != nil {
+			if err, ok := i.(error); ok {
+				log.Printf("handleConnection::Failed: %v\n", err)
+				handler.WriteSystemError(c, err.Error())
+			}
+        }
 
-	// switch process by kind
-	switch kind {
-	case HeaderRequest:
-		fmt.Printf("Server::Recieved %V\n", data)
-		ticket, err := MakeTicketFromTuple(data)
-		if err != nil {
-			fmt.Printf("Server::Invalid request (%s)\n", err.Error())
-			handler.WriteError(c, fmt.Sprintf("Invalid request (%s)", err.Error()))
-			break
-		}
-		fmt.Printf("ticket %V\n", ticket)
-
-		f := func(v interface{}) {
-			switch v.(type) {
-			case StreamExecutedResult:
-			case StreamOutputResult:
+		// retry 5times if failed...
+		for i:=0; i<5; i++ {
+			if err := handler.WriteExit(c); err == nil {
+				// if error NOT returnd, ok
+				break
 			}
 		}
-		if err := context.ExecTicket(ticket, f); err != nil {
-			fmt.Printf("Server::Failed to exec ticket (%s)\n", err.Error())
-			handler.WriteError(c, fmt.Sprintf("Failed to exec ticket (%s)", err.Error()))
-			break
+
+		//
+		c.Close()
+
+		//
+		log.Printf("Server connection CLOSED %v\n", c)
+	}()
+
+	//
+	error_event := make(chan error)
+
+	//
+	go func() {
+		// set timeout at the first time
+		c.SetReadDeadline(time.Now().Add(10 * time.Second))
+		kind, data, err := handler.read(c)
+		if err != nil {
+			error_event <- errors.New(fmt.Sprintf("Reciever error(%v)", err))
+		}
+		log.Printf("Server recv: %d / %v\n", kind, data)
+
+		//
+		defer close(error_event)
+
+		// switch process by kind
+		switch kind {
+		case HeaderRequest:
+			fmt.Printf("Server::Recieved %V\n", data)
+			ticket, err := MakeTicketFromTuple(data)
+			if err != nil {
+				fmt.Printf("Server::Invalid request (%s)\n", err.Error())
+				error_event <- errors.New(fmt.Sprintf("Invalid request (%s)", err.Error()))
+				return
+			}
+			fmt.Printf("ticket %V\n", ticket)
+
+			f := func(v interface{}) {
+				switch v.(type) {
+				case *StreamOutputResult:
+					var err error = nil
+					for i:=0; i<5; i++ {		// retry 5times if failed...
+						if err = handler.WriteOutputResult(c, v.(*StreamOutputResult)); err == nil {
+							return
+						}
+					}
+					error_event <- errors.New("Failed to send output result : " + err.Error())
+					return
+
+				case *StreamExecutedResult:
+					var err error = nil
+					for i:=0; i<5; i++ {		// retry 5times if failed...
+						if err = handler.WriteExecutedResult(c, v.(*StreamExecutedResult)); err == nil {
+							return
+						}
+					}
+					error_event <- errors.New("Failed to send executed result : " + err.Error())
+					return
+
+				default:
+					error_event <- errors.New("Unsupported type object was given to callback")
+					return
+				}
+			}
+
+			// execute ticket data
+			if err := context.ExecTicket(ticket, f); err != nil {
+				fmt.Printf("Server::Failed to exec ticket (%s)\n", err.Error())
+				error_event <- errors.New(fmt.Sprintf("Failed to exec ticket (%s)", err.Error()))
+				return
+			}
+
+		default:
+			error_event <- errors.New("Server can accept only 'Request' messages")
+			return
 		}
 
-		handler.WriteExit(c)
+		log.Printf("Resuest passed\n")
+		error_event <- nil
+	}()
 
-	default:
-		handler.WriteError(c, fmt.Sprintf("Server can accept only 'Request' messages"))
+	// wait
+	for err := range error_event {
+		if err != nil {
+			panic(err)
+		}
 	}
-
-	log.Printf("Server recv: %d / %v\n", kind, data)
 }

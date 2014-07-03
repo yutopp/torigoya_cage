@@ -42,6 +42,7 @@ func (bm *ExecutedResult) IsFailed() bool {
 	return bm.Status != Passed;
 }
 
+//
 func (bm *ExecutedResult) Encode() ([]byte, error) {
 	var msgpack_bytes []byte
 	enc := codec.NewEncoderBytes(&msgpack_bytes, &msgPackHandler)
@@ -59,4 +60,9 @@ func DecodeExecuteResult(base []byte) (*ExecutedResult, error) {
 	}
 
 	return bm, nil
+}
+
+//
+func (bm *ExecutedResult) ToTuple() []interface{} {
+	return []interface{}{ bm.UsedCPUTimeSec, bm.UsedMemoryBytes, bm.Signal, bm.ReturnCode, bm.CommandLine, bm.Status, bm.SystemErrorMessage}
 }
