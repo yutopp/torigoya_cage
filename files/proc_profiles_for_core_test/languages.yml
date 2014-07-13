@@ -1,0 +1,7 @@
+# languages
+
+-
+  id: 0
+  name: "C++"
+  runnable: true
+  path: "lang.c++.test"
