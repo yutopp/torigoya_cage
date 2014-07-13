@@ -1,5 +1,20 @@
-local_debug:
+system_test_mode:
   host: "0.0.0.0"
-  port: 12321
+  port: 23432
+  host_user: "root"
+  lang_proc_config_dir: "${base}/proc_profiles"
+  lang_proc_update_zip_address: "https://bitbucket.org/yutopp/torigoya_language_configs/get/master.zip"
+  proc_package_type: "deb"
+  proc_package_deb_source_list: "sources.list.d/torigoya-packages.list"
+  is_debug_mode: true
+
+
+release:
+  host: "0.0.0.0"
+  port: 23432
   host_user: "root"
   lang_proc_config_dir: "${base}/test_proc_profiles"
+  lang_proc_update_zip_address: "https://bitbucket.org/yutopp/torigoya_language_configs/get/master.zip"
+  proc_package_type: "deb"
+  proc_package_deb_source_list: "sources.list.d/torigoya-packages.list"
+  is_debug_mode: true

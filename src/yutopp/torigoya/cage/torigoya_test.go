@@ -20,7 +20,7 @@ import (
 
 func TestCreateTarget(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -52,7 +52,7 @@ func TestCreateTarget(t *testing.T) {
 
 func TestCreateTargetRepeat(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -77,7 +77,7 @@ func TestCreateTargetRepeat(t *testing.T) {
 
 func TestReassignTarget(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -115,7 +115,7 @@ func TestReassignTarget(t *testing.T) {
 
 func TestReassignTarget2(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -160,7 +160,7 @@ func TestReassignTarget2(t *testing.T) {
 
 func TestCreateInput(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -255,55 +255,9 @@ func TestExec(t *testing.T) {
 
 
 
-func TestBuild(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
-	if err != nil {
-		t.Errorf(err.Error())
-		return
-	}
-
-
-	base_name := "aaa4" + strconv.FormatInt(time.Now().Unix(), 10)
-	sources := []*SourceData{
-		&SourceData{
-			"test.cpp",
-			[]byte(""),
-			false,
-		},
-	}
-
-	proc_profile := &ProcProfile{
-		IsBuildRequired: true,
-		IsLinkIndependent: true,
-	}
-
-	build_inst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			CpuTimeLimit: 10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			CpuTimeLimit: 10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
-
-	f := func(v interface{}) {
-		t.Logf("%V", v)
-	}
-
-	// build
-	if err := ctx.execManagedBuild(proc_profile, base_name, sources, build_inst, f); err != nil {
-		t.Errorf(err.Error())
-		return
-	}
-}
-
-
 func TestInvokeBuild(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -328,7 +282,7 @@ int main() {
 	}
 
 	// load id:0/version:0.0.0
-	configs, _ := LoadProcConfigs(filepath.Join(gopath, "test_proc_profiles"))
+	configs, _ := LoadProcConfigs(filepath.Join(gopath, "files", "proc_profiles_for_core_test"))
 	proc_profile := configs[0].Versioned["test"]
 
 	build_inst := &BuildInstruction{
@@ -353,7 +307,7 @@ int main() {
 
 func TestTicket(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -501,8 +455,8 @@ type test_result struct {
 func makehelperCallback(result *test_result) func(v interface{}) {
 	return func(v interface{}) {
 		switch v.(type) {
-		case StreamExecutedResult:
-			r := v.(StreamExecutedResult)
+		case *StreamExecutedResult:
+			r := v.(*StreamExecutedResult)
 			switch r.Mode {
 			case CompileMode:
 				result.compile.result = r.Result
@@ -513,8 +467,8 @@ func makehelperCallback(result *test_result) func(v interface{}) {
 				result.run[r.Index].result = r.Result
 			}
 
-		case StreamOutputResult:
-			r := v.(StreamOutputResult)
+		case *StreamOutputResult:
+			r := v.(*StreamOutputResult)
 			switch r.Mode {
 			case CompileMode:
 				switch r.Output.Fd {
@@ -541,6 +495,7 @@ func makehelperCallback(result *test_result) func(v interface{}) {
 					result.run[r.Index].err = result.run[r.Index].err + string(r.Output.Buffer)
 				}
 			}
+
 		default:
 			panic("unsupported type.");
 		}

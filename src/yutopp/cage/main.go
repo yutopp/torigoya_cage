@@ -21,27 +21,35 @@ import (
 	"gopkg.in/v1/yaml"
 )
 
+
 // replace string "${base}"
 var base_reg = regexp.MustCompile("\\$\\{base\\}")
 
 type Config map[string]*struct {
-	Host				string `yaml:"host"`
-	Port				int `yaml:"port"`
-	HostUser			string `yaml:"host_user"`
-	LangProcConfigDir	string `yaml:"lang_proc_config_dir"`
+	Host						string `yaml:"host"`
+	Port						int `yaml:"port"`
+	HostUser					string `yaml:"host_user"`
+	LangProcConfigDir			string `yaml:"lang_proc_config_dir"`
+	LangProcUpdateZipAddress	string `yaml:"lang_proc_update_zip_address"`
+
+	ProcPackageType				string `yaml:"proc_package_type"`
+	ProcPackageDebSourceList	string `yaml:"proc_package_deb_source_list"`
+	IsDebugMode					bool `yaml:"is_debug_mode"`
 }
 
+//
 func main() {
 	cwd, err := os.Getwd()
 	if err != nil {
 		log.Panicf("Error (%v)\n", err)
 	}
 
-	log.Printf("%s\n", cwd)
+	log.Printf("Current working dir: %s\n", cwd)
 
 	//
 	config_path := flag.String("config_path", "config.yml", "path to config.yml")
-	mode := flag.String("mode", "local_debug", "select mode from config")
+	mode := flag.String("mode", "release", "select mode from config")
+	flag.Parse()
 
 	//
 	config_bytes, err := ioutil.ReadFile(*config_path)
@@ -63,21 +71,41 @@ func main() {
 	//
 	target_config, ok := config[*mode]
 	if !ok {
-		fmt.Printf("the mode \"%s\" is not seletable. choose from below", *mode)
+		fmt.Printf("the mode \"%s\" is not seletable. choose from below\n", *mode)
 		for k, _ := range config {
-			fmt.Printf("-> %s", k)
+			fmt.Printf("-> %s\n", k)
 		}
 		os.Exit(-1)
 	}
 
 	// show
-	log.Printf("Host:       %s\n", target_config.Host)
-	log.Printf("Port:       %d\n", target_config.Port)
-	log.Printf("HostUser:   %s\n", target_config.HostUser)
-	log.Printf("Profiles:   %s\n", target_config.LangProcConfigDir)
+	log.Printf("Mode:               %s\n", *mode)
+	log.Printf("Host:               %s\n", target_config.Host)
+    log.Printf("Port:               %d\n", target_config.Port)
+    log.Printf("HostUser:           %s\n", target_config.HostUser)
+    log.Printf("Profiles:           %s\n", target_config.LangProcConfigDir)
+    log.Printf("ProcZipAddress:     %s\n", target_config.LangProcUpdateZipAddress)
+	log.Printf("ProcPackageType:    %s\n", target_config.ProcPackageType)
+
+	var updater torigoya.PackageUpdater = nil
+	switch target_config.ProcPackageType {
+	case "deb":
+		updater = &torigoya.DebPackageUpdater{
+			SourceListPath: target_config.ProcPackageDebSourceList,
+		}
+	default:
+		log.Panicf("ProcPackageType (%v) is not supported\n", target_config.ProcPackageType)
+	}
 
 	//
-	ctx, err := torigoya.InitContext(cwd, target_config.HostUser, target_config.LangProcConfigDir)
+	// make context!
+	ctx, err := torigoya.InitContext(
+		cwd,
+		target_config.HostUser,
+		target_config.LangProcConfigDir,
+		target_config.LangProcUpdateZipAddress,
+		updater,
+	)
 	if err != nil {
 		log.Panicf(err.Error())
 	}

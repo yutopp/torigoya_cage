@@ -20,3 +20,14 @@ func expectRoot() {
 		panic("run this program as root")
 	}
 }
+
+func readUInt(v interface{}) (uint64, bool) {
+	switch v.(type) {
+	case int64:
+		return uint64(v.(int64)), true
+	case uint64:
+		return v.(uint64), true
+	default:
+		return 0, false
+	}
+}

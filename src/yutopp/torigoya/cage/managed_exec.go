@@ -22,6 +22,7 @@ import(
 	"os"
 	"os/exec"
 	"syscall"
+	"log"
 )
 
 
@@ -208,13 +209,18 @@ func managedExecChild(
 		os.Exit(-1)
 	}()
 
-	fmt.Printf("============= child (%v)\n", args)
-	fmt.Printf("============= envs  (%v)\n", envs)
+	log.Printf("== Managed: child           (%v)\n", args)
+	log.Printf("== Managed: envs            (%v)\n", envs)
+	log.Printf("== Managed: CPU(sec)        (%v)\n", rl.CPU)
+	log.Printf("== Managed: memory(byte)    (%v)\n", rl.AS)
+	log.Printf("== Managed: fsize           (%v)\n", rl.FSize)
+
+
 
 	//
 	setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
 	setLimit(C.RLIMIT_NOFILE, 1024)		// Process can open 1024 files
-	setLimit(C.RLIMIT_NPROC, 20)		// Process can create 20 processes
+	setLimit(C.RLIMIT_NPROC, 500)		// Process can create processes to 500
 	setLimit(C.RLIMIT_MEMLOCK, 1024)	// Process can lock 1024 Bytes by mlock(2)
 
 	setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)

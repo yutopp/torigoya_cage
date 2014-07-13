@@ -109,7 +109,7 @@ func TestUnitProcIndexListStructure(t *testing.T) {
   path: "lang.hoge.test"
 `
 
-	index_list, err := makeProcIndexListFromBuf([]byte(file))
+	index_list, err := makeProcDescriptionListFromBuf([]byte(file))
 	if err != nil {
 		t.Fatalf("error: %v", err)
 		return
@@ -151,7 +151,7 @@ func TestUnitProcIndexListStructure(t *testing.T) {
 
 func TestLoadProcProfilesFromFile(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	index_list, err := makeProcIndexListFromPath(filepath.Join(gopath, "test_proc_profiles", "languages.yml"))
+	index_list, err := makeProcDescriptionListFromPath(filepath.Join(gopath, "files", "proc_profiles_for_core_test", "languages.yml"))
 	if err != nil {
 		t.Fatalf("error: %v", err)
 		return
@@ -180,7 +180,7 @@ func TestLoadProcProfilesFromFile(t *testing.T) {
 
 func TestLoadProcConfigs(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	configs, err := LoadProcConfigs(filepath.Join(gopath, "test_proc_profiles"))
+	configs, err := LoadProcConfigs(filepath.Join(gopath, "files", "proc_profiles_for_core_test"))
 	if err != nil {
 		t.Errorf(err.Error())
 		return

@@ -66,6 +66,21 @@ func (ctx *Context) createMultipleTargets(
 	managed_group_id	int,
 	sources				[]*TextContent,
 ) (source_full_paths []string, err error) {
+	return ctx.createMultipleTargetsWithDefaultName(
+		base_name,
+		managed_group_id,
+		sources,
+		nil,
+	)
+}
+
+//
+func (ctx *Context) createMultipleTargetsWithDefaultName(
+	base_name			string,
+	managed_group_id	int,
+	sources				[]*TextContent,
+	default_name		*string,
+) (source_full_paths []string, err error) {
 	log.Println(">> called createMultipleTargets")
 
 	//
@@ -145,7 +160,19 @@ func (ctx *Context) createMultipleTargets(
 			return nil, errors.New("source_file_name must NOT be empty")
 		}
 
-		source_full_path := filepath.Join(user_home_path, source.Name)
+		source_name := func() string {
+			if default_name == nil {
+				return source.Name
+			} else {
+				if source.Name == "*default*" {
+					return *default_name
+				} else {
+					return source.Name
+				}
+			}
+		}()
+
+		source_full_path := filepath.Join(user_home_path, source_name)
 		f, err := os.OpenFile(source_full_path, os.O_WRONLY|os.O_CREATE, 0600)
 		if err != nil {
 			return nil, err
@@ -162,6 +189,14 @@ func (ctx *Context) createMultipleTargets(
 
 		//
 		source_full_paths[index] = source_full_path
+	}
+
+	fmt.Printf("==================================================\n")
+	out, err := exec.Command("/bin/ls", "-laR", user_home_path).Output()
+	if err != nil {
+		fmt.Printf("error:: %s\n", err.Error())
+	} else {
+		fmt.Printf("passed:: %s\n", out)
 	}
 
 	return source_full_paths, err

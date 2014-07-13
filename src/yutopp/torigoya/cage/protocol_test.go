@@ -10,36 +10,18 @@ package torigoya
 
 import (
 	"testing"
-	"net"
-	"os"
+	_ "net"
+	_ "os"
 	"fmt"
-	"path/filepath"
-	"time"
-	"strconv"
+	_ "path/filepath"
+	_ "time"
+	_ "strconv"
 
 	"github.com/ugorji/go/codec"
 )
 
 
-func TestProtocol(t *testing.T) {
-	data := ProtocolDataType{ "abcde": "buffer" }
-
-	result, err := EncodeToTorigoyaProtocol(HeaderRequest, data)
-
-	_ = result
-	_ = err
-
-	if len(result) == 0 {
-		t.Fatalf("length should be 0 (but %d)", len(result))
-	}
 /*
-	if !bytes.Equal() {
-	}
-*/
-	t.Fatalf("||| %v", result)
-}
-
-
 func TestProtocolServer(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "test_proc_profiles"))
@@ -153,7 +135,7 @@ int main() {
 		fmt.Printf("client recv: %d / %v\n", kind, data)
 	}
 }
-
+*/
 
 func TestProtocolReadTicketFromPackedData(t *testing.T) {
 	// packed data

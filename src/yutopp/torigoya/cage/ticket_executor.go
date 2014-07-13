@@ -13,285 +13,9 @@ package torigoya
 import(
 	"log"
 	"fmt"
-	"time"
 	"errors"
-	"os"
-	"os/exec"
-	"syscall"
 	"path/filepath"
 )
-
-
-//
-type OutFd		int
-const (
-	StdoutFd = OutFd(0)
-	StderrFd = OutFd(1)
-)
-type StreamOutput struct {
-	Fd			OutFd
-	Buffer		[]byte
-}
-
-func (s *StreamOutput) ToTuple() []interface{} {
-	return []interface{}{ s.Fd, s.Buffer }
-}
-
-//
-func (bm *BridgeMessage) invokeProcessCloner(
-	cloner_dir		string,
-	output_stream	chan<-StreamOutput,
-) (*ExecutedResult, error) {
-	return invokeProcessClonerBase(cloner_dir, "process_cloner", bm, output_stream)
-}
-
-//
-func invokeProcessClonerBase(
-	cloner_dir		string,
-	cloner_name		string,
-	bm				*BridgeMessage,
-	output_stream	chan<-StreamOutput,
-) (*ExecutedResult, error) {
-	cloner_path := filepath.Join(cloner_dir, cloner_name)
-	log.Printf("Cloner path: %s", cloner_path)
-
-	callback_path := filepath.Join(cloner_dir, "cage.callback")
-
-	// init default value
-	if bm == nil {
-		bm = &BridgeMessage{}
-	}
-
-	// TODO: close on exec
-	// pipe for
-	stdout_pipe, err := makePipe()
-	if err != nil { return nil, err }
-	defer stdout_pipe.Close()
-
-	stderr_pipe, err := makePipe()
-	if err != nil { return nil, err }
-	defer stderr_pipe.Close()
-
-	result_pipe, err := makePipe()
-	if err != nil { return nil, err }
-	defer result_pipe.Close()
-
-	// update pipe data to message
-	bm.Pipes = &BridgePipes{
-		Stdout: stdout_pipe.CopyForClone(),
-		Stderr: stderr_pipe.CopyForClone(),
-		Result: result_pipe.CopyForClone(),
-	}
-
-	//
-	content_string, err := bm.Encode()
-	if err != nil { return nil, err }
-
-	//
-	cmd := exec.Command(cloner_path)
-	cmd.Env = []string{
-		"callback_executable=" + callback_path,
-		"packed_torigoya_content=" + content_string,
-	}
-
-	// debug...
-	cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
-
-	//cmd.Stdout = nil
-    //cmd.Stderr = nil
-
-
-	// Start Process
-	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
-		return nil, err
-	}
-
-	// wait for exit process
-	process_wait_c := make(chan error)
-	go func() {
-		process_wait_c <- cmd.Wait()
-	}()
-
-	// read stdout/stderr
-	stdout_c := make(chan error)
-	go readPipeAsync(stdout_pipe.ReadFd, stdout_c, StdoutFd, output_stream)
-	stderr_c := make(chan error)
-	go readPipeAsync(stderr_pipe.ReadFd, stderr_c, StderrFd, output_stream)
-
-	//
-	defer func() {
-		// force close
-		stdout_pipe.Close()
-		stderr_pipe.Close()
-
-		// block
-		<- stdout_c
-		<- stderr_c
-	}()
-
-	// wait for finishing subprocess
-	select {
-	case err := <-process_wait_c:
-		// subprocess has been finished
-		log.Printf("MYAN %v", err)
-		if err != nil {
-			return nil, err
-		}
-
-		log.Printf("?? %v", cmd.ProcessState.Success())
-		if !cmd.ProcessState.Success() {
-			return nil, errors.New("Process finished with failed state")
-		}
-
-		//
-		result_pipe.CloseWrite()
-		result_buf, _ := readPipe(result_pipe.ReadFd)
-		result, err := DecodeExecuteResult(result_buf)
-		log.Printf("??RESULT!!!!!!! %v / %v", result, err)
-
-		return result, err
-
-	case <-time.After(500 * time.Second):
-		// TODO: fix
-		// will blocking( wait for response at least 500 seconds )
-		log.Println("TIMEOUT")
-		return nil, errors.New("Process timeouted")
-	}
-}
-
-func readPipeAsync(fd int, cs chan<-error, output_fd OutFd, output_stream chan<-StreamOutput) {
-	buffer := make([]byte, 1024)
-	defer close(cs)
-
-	for {
-		size, err := syscall.Read(fd, buffer)
-		if err != nil {
-			cs <- err
-			return
-		}
-
-		if size != 0 {
-			log.Printf("= %d ==> %d", fd, size)
-			log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[:size]))
-
-			//
-			copied := make([]byte, size)
-			copy(copied, buffer[:size])
-
-			//
-			output_stream <- StreamOutput{
-				Fd: output_fd,
-				Buffer: copied,
-			}
-		}
-	}
-
-	cs <- nil
-}
-
-func readPipe(fd int) (result []byte, err error) {
-	buffer := make([]byte, 1024)
-
-	for {
-		size, err := syscall.Read(fd, buffer)
-		if err != nil {
-			break
-		}
-
-		if size != 0 {
-			result = append(result, buffer[:size]...)
-		} else {
-			break
-		}
-	}
-
-	return
-}
-
-
-
-
-// ========================================
-// For source codes, stdins
-type SourceData struct {
-	Name			string
-	Data			[]byte
-	IsCompressed	bool
-}
-
-func convertSourcesToContents(
-	sources []*SourceData,
-) (source_contents []*TextContent, err error) {
-	source_contents = make([]*TextContent, len(sources))
-
-	//
-	for i, s := range sources {
-		// collect file names
-		source_contents[i], err = convertSourceToContent(s)
-		if err != nil { return nil,err }
-	}
-
-	return source_contents, nil
-}
-
-func convertSourceToContent(
-	source *SourceData,
-) (*TextContent, error) {
-	data, err := func() ([]byte, error) {
-		// TODO: check that data is compressed
-		return source.Data, nil
-	}()
-	if err != nil {
-		return nil, err
-	}
-
-	return &TextContent{
-		Name: source.Name,
-		Data: data,
-	}, nil
-}
-
-
-// ========================================
-type ExecutionSetting struct {
-	CommandLine			string
-	StructuredCommand	[][]string
-	CpuTimeLimit		uint64
-	MemoryBytesLimit	uint64
-}
-
-
-// ========================================
-type BuildInstruction struct {
-	CompileSetting		*ExecutionSetting
-	LinkSetting			*ExecutionSetting
-}
-
-
-// ========================================
-type Input struct{
-	stdin				*SourceData
-	setting				*ExecutionSetting
-}
-
-
-// ========================================
-type RunInstruction struct {
-	Inputs				[]Input
-}
-
-
-// ========================================
-type Ticket struct {
-	BaseName		string
-	ProcId			uint64
-	ProcVersion		string
-	Sources			[]*SourceData
-	BuildInst		*BuildInstruction
-	RunInst			*RunInstruction
-}
 
 
 // send this message to sandbox process
@@ -336,13 +60,7 @@ func (ctx *Context) ExecTicket(
 	//
 
 	// run
-	errs := ctx.invokeRun(
-		ticket.BaseName,
-		proc_profile,
-		ticket.RunInst,
-		callback,
-	)
-	if errs != nil {
+	if errs := ctx.execManagedRun(proc_profile,	ticket.BaseName, ticket.Sources, ticket.RunInst, callback); errs != nil {
 		// TODO: proess error
 		for err := range errs {
 			fmt.Printf("??? %v\n", err)
@@ -352,38 +70,6 @@ func (ctx *Context) ExecTicket(
 
 	return nil
 }
-
-
-//
-type StreamOutputResult struct {
-	Mode		int
-	Index		int
-	Output		*StreamOutput
-}
-
-func (r *StreamOutputResult) ToTuple() []interface{} {
-	return []interface{}{ r.Mode, r.Index, r.Output.ToTuple() }
-}
-
-
-//
-type StreamExecutedResult struct {
-	Mode		int
-	Index		int
-	Result		*ExecutedResult
-}
-func (r *StreamExecutedResult) ToTuple() []interface{} {
-	return []interface{}{ r.Mode, r.Index, r.Result.ToTuple() }
-}
-
-
-//
-type invokeResultRecieverCallback		func(interface{})
-
-
-
-
-
 
 
 //
@@ -405,7 +91,7 @@ func (ctx *Context) execManagedBuild(
 		if err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
 			// compile phase
 			// map files
-			if err := ctx.mapSources(base_name, sources, jailed_user); err != nil {
+			if err := ctx.mapSources(base_name, sources, jailed_user, proc_profile); err != nil {
 				return err
 			}
 
@@ -443,9 +129,10 @@ func (ctx *Context) execManagedBuild(
 	return nil
 }
 
-func (ctx *Context) invokeRun(
-	base_name			string,
+func (ctx *Context) execManagedRun(
 	proc_profile		*ProcProfile,
+	base_name			string,
+	sources				[]*SourceData,
 	run_inst			*RunInstruction,
 	callback			invokeResultRecieverCallback,
 ) []error {
@@ -456,13 +143,26 @@ func (ctx *Context) invokeRun(
 	user_home_path := ctx.jailedUserDir
 	bin_base_path := filepath.Join(ctx.basePath, "bin")
 
+	// if it is build NOT required processor, sources have not been mapped yet
+	if !proc_profile.IsBuildRequired {
+		if err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
+			// map files
+			if err := ctx.mapSources(base_name, sources, jailed_user, proc_profile); err != nil {
+				return err
+			}
+			return nil
+		}); err != nil {
+			return []error{err}
+		}
+	}
+
 	//
 	var errs []error = nil
 	// ========================================
 	for index, input := range run_inst.Inputs {
 		// TODO: async
 		err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
-			return ctx.invokeRunInputCommandBase(
+			return ctx.invokeRunCommand(
 				user_dir_path,
 				user_home_path,
 				bin_base_path,
@@ -486,8 +186,8 @@ func (ctx *Context) invokeRun(
 }
 
 
-
-
+// ========================================
+// ========================================
 
 
 func (ctx *Context) invokeCompileCommand(
@@ -591,8 +291,7 @@ func (ctx *Context) invokeLinkCommand(
 	return nil
 }
 
-
-func (ctx *Context) invokeRunInputCommandBase(
+func (ctx *Context) invokeRunCommand(
 	user_dir_path		string,
 	user_home_path		string,
 	bin_base_path		string,
@@ -675,10 +374,15 @@ func (ctx *Context) invokeRunInputCommandBase(
 }
 
 
+// ========================================
+// ========================================
+
+
 func (ctx *Context) mapSources(
 	base_name			string,
 	sources				[]*SourceData,
 	jailed_user			*JailedUserInfo,
+	proc_profile		*ProcProfile,
 ) error {
 	// unpack source codes
 	source_contents, err := convertSourcesToContents(sources)
@@ -687,8 +391,16 @@ func (ctx *Context) mapSources(
 	}
 
 	//
-	_, err = ctx.createMultipleTargets(base_name, jailed_user.GroupId, source_contents)
-	if err != nil {
+	default_filename := fmt.Sprintf("%s.%s", proc_profile.Source.File, proc_profile.Source.Extension)
+	fmt.Printf("DEFEDEDEAFAWF   %s", default_filename)
+
+	//
+	if _, err := ctx.createMultipleTargetsWithDefaultName(
+		base_name,
+		jailed_user.GroupId,
+		source_contents,
+		&default_filename,
+	); err != nil {
 		return errors.New("couldn't create multi target : " + err.Error());
 	}
 
@@ -696,6 +408,38 @@ func (ctx *Context) mapSources(
 }
 
 
+// ========================================
+// ========================================
+
+
+//
+type StreamOutputResult struct {
+	Mode		int
+	Index		int
+	Output		*StreamOutput
+}
+
+func (r *StreamOutputResult) ToTuple() []interface{} {
+	return []interface{}{ r.Mode, r.Index, r.Output.ToTuple() }
+}
+
+
+//
+type StreamExecutedResult struct {
+	Mode		int
+	Index		int
+	Result		*ExecutedResult
+}
+func (r *StreamExecutedResult) ToTuple() []interface{} {
+	return []interface{}{ r.Mode, r.Index, r.Result.ToTuple() }
+}
+
+
+//
+type invokeResultRecieverCallback		func(interface{})
+
+
+//
 func sendOutputToCallback(
 	callback			invokeResultRecieverCallback,
 	output_stream		chan StreamOutput,
@@ -713,6 +457,8 @@ func sendOutputToCallback(
 	}
 }
 
+
+//
 func sendResultToCallback(
 	callback			invokeResultRecieverCallback,
 	result				*ExecutedResult,

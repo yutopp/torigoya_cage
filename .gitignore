@@ -2,3 +2,7 @@ bin/
 pkg/
 
 .vagrant
+
+torigoya_factory
+torigoya_package_scripts
+torigoya_proc_profiles

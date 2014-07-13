@@ -19,22 +19,33 @@ import (
 	"github.com/ugorji/go/codec"
 )
 
-
+type MessageKind	uint8
 const (
-	HeaderIndexBegin	= 0
+	MessageKindIndexBegin				= MessageKind(0)
 
-	HeaderRequest		= 0
-	HeaderOutputs		= 1
-	HeaderResult		= 2
-	HeaderSystemError	= 3
-	HeaderExit			= 4
+	// Sent from client
+	MessageKindAcceptRequest			= MessageKind(0)
+	MessageKindTicketRequest			= MessageKind(1)
+	MessageKindUpdateRepositoryRequest	= MessageKind(2)
+	MessageKindReloadProcTableRequest	= MessageKind(3)
+	MessageKindUpdateProcTableRequest	= MessageKind(4)
+	MessageKindGetProcTableRequest		= MessageKind(5)
 
-	HeaderIndexEnd		= 4
+	// Sent from server
+	MessageKindAccept					= MessageKind(6)
+	MessageKindOutputs					= MessageKind(7)
+	MessageKindResult					= MessageKind(8)
+	MessageKindSystemError				= MessageKind(9)
+	MessageKindExit						= MessageKind(10)
 
-	HeaderInvalid		= 0xff
+	MessageKindSystemResult				= MessageKind(11)
+	MessageKindProcTable				= MessageKind(12)
+
+	//
+	MessageKindIndexEnd					= MessageKind(12)
+	MessageKindInvalid					= MessageKind(0xff)
 )
 
-var HeaderString = []string{ "REQ", "OUT", "RES" , "ERR", "END" }
 
 // torigoya protocol
 // header 5 bytes
@@ -45,14 +56,14 @@ const HeaderLength = 5
 type ProtocolDataType map[string]string
 
 //
-func EncodeToTorigoyaProtocol(header int8, data interface{}) ([]byte, error) {
+func EncodeToTorigoyaProtocol(kind MessageKind, data interface{}) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 
-	// make header(1Bytes)
-	if header < HeaderIndexBegin || header > HeaderIndexEnd {
-		return nil, errors.New(fmt.Sprintf("Failed to write data / invalid header %d", header))
+	// write kind(1Bytes)
+	if kind < MessageKindIndexBegin || kind > MessageKindIndexEnd {
+		return nil, errors.New(fmt.Sprintf("Failed to write data / invalid header %d", kind))
 	}
-	if err := binary.Write(buf, binary.LittleEndian, header); err != nil { return nil, err }
+	if err := binary.Write(buf, binary.LittleEndian, kind); err != nil { return nil, err }
 
 	// (encode data)
 	var msgpack_bytes []byte
@@ -84,12 +95,12 @@ type ProtocolHandler struct {
 	buffer			[]byte
 }
 
-func (ph *ProtocolHandler) read(reader io.Reader) (uint8, interface{}, error) {
+func (ph *ProtocolHandler) read(reader io.Reader) (MessageKind, interface{}, error) {
 	// read protocol
 	n, err := reader.Read(ph.header_buffer[:])
-	if err != nil { return HeaderInvalid, nil, err }
+	if err != nil { return MessageKindInvalid, nil, err }
 	if n < HeaderLength {
-		return HeaderInvalid, nil, errors.New("")
+		return MessageKindInvalid, nil, errors.New("")
 	}
 	log.Printf("read length:%d / bal: %v\n", n, ph.header_buffer[:n])
 
@@ -99,8 +110,10 @@ func (ph *ProtocolHandler) read(reader io.Reader) (uint8, interface{}, error) {
 	// length of data
 	var length uint32
 	if err := binary.Read(bytes.NewReader(ph.header_buffer[1:]), binary.LittleEndian, &length); err != nil {
-		return HeaderInvalid, nil, err
+		return MessageKindInvalid, nil, err
 	}
+
+	// TODO: add limitation of length
 
 	//
 	if uint32(len(ph.buffer)) < length {
@@ -108,10 +121,10 @@ func (ph *ProtocolHandler) read(reader io.Reader) (uint8, interface{}, error) {
 	}
 	n, err = reader.Read(ph.buffer[:])
 	if err != nil {
-		return HeaderInvalid, nil, err
+		return MessageKindInvalid, nil, err
 	}
 	if uint32(n) != length {
-		return HeaderInvalid, nil, errors.New("")
+		return MessageKindInvalid, nil, errors.New("")
 	}
 
 	//
@@ -119,13 +132,13 @@ func (ph *ProtocolHandler) read(reader io.Reader) (uint8, interface{}, error) {
 	var data interface{}
 	dec := codec.NewDecoderBytes(ph.buffer[:], &msgPackHandler)
 	if err := dec.Decode(&data); err != nil {
-		return HeaderInvalid, nil, err
+		return MessageKindInvalid, nil, err
 	}
 
-	return kind, data, nil
+	return MessageKind(kind), data, nil
 }
 
-func (ph *ProtocolHandler) write(writer io.Writer, header int8, data interface{}) error {
+func (ph *ProtocolHandler) write(writer io.Writer, header MessageKind, data interface{}) error {
 	buf, err := EncodeToTorigoyaProtocol(header, data)
 	if err != nil {
 		return err
@@ -144,27 +157,57 @@ func (ph *ProtocolHandler) write(writer io.Writer, header int8, data interface{}
 	return nil
 }
 
-// TODO: remove
-func (ph *ProtocolHandler) WriteRequest(writer io.Writer, message *Ticket) error {
-	return ph.write(writer, HeaderRequest, message)
+
+//
+func (ph *ProtocolHandler) writeAccept(
+	writer io.Writer,
+) error {
+	return ph.write(writer, MessageKindAccept, nil)
+}
+
+func (ph *ProtocolHandler) writeOutputResult(
+	writer io.Writer,
+	r *StreamOutputResult,
+) error {
+	return ph.write(writer, MessageKindOutputs, r.ToTuple())
 }
 
 //
-func (ph *ProtocolHandler) WriteOutputResult(writer io.Writer, r *StreamOutputResult) error {
-	return ph.write(writer, HeaderOutputs, r.ToTuple())
+func (ph *ProtocolHandler) writeExecutedResult(
+	writer io.Writer,
+	r *StreamExecutedResult,
+) error {
+	return ph.write(writer, MessageKindResult, r.ToTuple())
 }
 
 //
-func (ph *ProtocolHandler) WriteExecutedResult(writer io.Writer, r *StreamExecutedResult) error {
-	return ph.write(writer, HeaderResult, r.ToTuple())
+func (ph *ProtocolHandler) writeSystemError(
+	writer io.Writer,
+	message string,
+) error {
+	return ph.write(writer, MessageKindSystemError, message)
 }
 
 //
-func (ph *ProtocolHandler) WriteSystemError(writer io.Writer, message string) error {
-	return ph.write(writer, HeaderSystemError, message)
+func (ph *ProtocolHandler) writeExit(
+	writer io.Writer,
+) error {
+	return ph.write(writer, MessageKindExit, "")
+}
+
+
+//
+func (ph *ProtocolHandler) writeSystemResult(
+	writer io.Writer,
+	status int,
+) error {
+	return ph.write(writer, MessageKindSystemResult, status)
 }
 
 //
-func (ph *ProtocolHandler) WriteExit(writer io.Writer) error {
-	return ph.write(writer, HeaderExit, "")
+func (ph *ProtocolHandler) writeProcTable(
+	writer				io.Writer,
+	proc_config_table	*ProcConfigTable,
+) error {
+	return ph.write(writer, MessageKindProcTable, proc_config_table)
 }

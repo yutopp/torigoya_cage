@@ -12,8 +12,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"io"
 	"io/ioutil"
 	"path/filepath"
+	"net/http"
 
 	"gopkg.in/v1/yaml"
 	"github.com/mattn/go-shellwords"
@@ -117,21 +119,21 @@ type ProcProfile struct {
 
 
 // ==================================================
-type ProcIndex struct {
+type ProcDescription struct {
 	Id			uint64
 	Name		string
 	Runnable	bool
 	Path		string
 }
 
-type ProcIndexList []ProcIndex
+type ProcDescriptionList []ProcDescription
 
 
 // ==================================================
 type ProcConfigTable map[uint64]ProcConfigUnit		// proc_id:config_unit
 type ProcConfigUnit struct {
-	Index		ProcIndex
-	Versioned	map[string]ProcProfile
+	Description		ProcDescription
+	Versioned		map[string]ProcProfile
 }
 
 
@@ -157,8 +159,8 @@ func makeProcProfileFromPath(filepath string) (ProcProfile, error) {
 }
 
 
-func makeProcIndexListFromBuf(buffer []byte) (ProcIndexList, error) {
-	var index_list ProcIndexList
+func makeProcDescriptionListFromBuf(buffer []byte) (ProcDescriptionList, error) {
+	var index_list ProcDescriptionList
 
 	if err := yaml.Unmarshal(buffer, &index_list); err != nil {
 		return nil, err
@@ -167,13 +169,13 @@ func makeProcIndexListFromBuf(buffer []byte) (ProcIndexList, error) {
 	return index_list, nil
 }
 
-func makeProcIndexListFromPath(filepath string) (ProcIndexList, error) {
+func makeProcDescriptionListFromPath(filepath string) (ProcDescriptionList, error) {
 	b, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		return nil, err
 	}
 
-	return makeProcIndexListFromBuf(b)
+	return makeProcDescriptionListFromBuf(b)
 }
 
 
@@ -208,7 +210,7 @@ func globProfiles(proc_path string) (map[string]ProcProfile, error) {
 func LoadProcConfigs(proc_prof_base_path string) (ProcConfigTable, error) {
 	var result = make(ProcConfigTable)
 
-	index_list, err := makeProcIndexListFromPath(filepath.Join(proc_prof_base_path, "languages.yml"))
+	index_list, err := makeProcDescriptionListFromPath(filepath.Join(proc_prof_base_path, "languages.yml"))
 	if err != nil {
 		return nil, err
 	}
@@ -240,4 +242,24 @@ func (pt *ProcConfigTable) Find(proc_id uint64, proc_version string) (*ProcProfi
 	}
 
 	return &proc_profile, nil
+}
+
+
+func (pt *ProcConfigTable) UpdateFromWeb(address string) error {
+	tmp_file, err := ioutil.TempFile("", "torigoya_tmp_")
+	if err != nil {
+		return errors.New("ProcConfigTable.ProcConfigTable error: " + err.Error())
+	}
+
+	response, err := http.Get(address)
+	if err != nil {
+		return errors.New("ProcConfigTable.ProcConfigTable error: " + err.Error())
+	}
+	defer response.Body.Close()
+
+	if _, err := io.Copy(tmp_file, response.Body); err != nil {
+		return errors.New("ProcConfigTable.ProcConfigTable error: " + err.Error())
+	}
+
+	return nil
 }

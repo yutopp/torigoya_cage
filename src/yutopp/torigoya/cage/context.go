@@ -19,23 +19,33 @@ import(
 	"path/filepath"
 )
 
+type PackageUpdater interface {
+	Update() error
+}
 
 type Context struct {
-	basePath		string
+	basePath			string
 
-	hostUser		*user.User
+	hostUser			*user.User
 
-	sandboxDir		string
-	homeDir			string
-	jailedUserDir	string
-	procConfTable	ProcConfigTable
+	sandboxDir			string
+	homeDir				string
+	jailedUserDir		string
+
+	procConfPath		string
+	procConfTable		ProcConfigTable
+
+	procSrcZipAddress	string
+	packageUpdater		PackageUpdater
 }
 
 
 func InitContext(
-	base_path string,
-	host_user_name string,
-	proc_config_path string,
+	base_path				string,
+	host_user_name			string,
+	proc_config_path		string,
+	proc_src_zip_address	string,
+	package_updater			PackageUpdater,
 ) (*Context, error) {
 	// TODO: change to checking capability
 	expectRoot()
@@ -82,6 +92,36 @@ func InitContext(
 		sandboxDir:			sandbox_dir,
 		homeDir:			"home",
 		jailedUserDir:		"home/torigoya",
+		procConfPath:		proc_config_path,
 		procConfTable:		proc_conf_table,
+		procSrcZipAddress:	proc_src_zip_address,
+		packageUpdater:		package_updater,
 	}, nil
+}
+
+
+func (ctx *Context) UpdatePackages() error {
+	if ctx.packageUpdater == nil {
+		return errors.New("Package Updater was not registerd")
+	}
+
+	return ctx.packageUpdater.Update()
+}
+
+
+func (ctx *Context) ReloadProcTable() error {
+	// RELOAD LoadProcConfigTable
+	proc_conf_table, err := LoadProcConfigs(ctx.procConfPath)
+	if err != nil {
+		return err
+	}
+
+	// rewrite
+	ctx.procConfTable = proc_conf_table
+
+	return nil
+}
+
+func (ctx *Context) UpdateProcTable() error {
+	return ctx.procConfTable.UpdateFromWeb(ctx.procSrcZipAddress)
 }
