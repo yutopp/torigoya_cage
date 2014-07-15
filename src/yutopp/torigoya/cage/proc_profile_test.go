@@ -16,56 +16,34 @@ import (
 
 func TestUnitProfileStructure(t *testing.T) {
 	file := `
----
-version: HEAD-2014.4.9.e912167e7ecf
-is_build_required: true
-is_link_independent: false
-source:
-  file: Prog
-  extension: java
-compile:
-  file: Prog
-  extension: class
-  command: javac
-  env:
-    PATH: "/usr/local/torigoya/java9-trunk/bin:/usr/bin"
-  allowed_command_line:
-  fixed_command_line:
-  - - " "
-    - Prog.java
-  - - "-J-Xms"
-    - 64m
-  - - "-J-Xmx"
-    - 128m
-  - - "-J-Xss"
-    - 512k
-  - - "-J-XX:CompressedClassSpaceSize="
-    - 32M
-  - - "-J-XX:MaxMetaspaceSize="
-    - 128M
-  - - "-J-XX:MetaspaceSize="
-    - 64M
-run:
-  command: java
-  env:
-    PATH: "/usr/local/torigoya/java9-trunk/bin:/usr/bin"
-  allowed_command_line:
-  fixed_command_line:
-  - - "-Xms"
-    - 64m
-  - - "-Xmx"
-    - 128m
-  - - "-Xss"
-    - 512k
-  - - "-XX:CompressedClassSpaceSize="
-    - 32M
-  - - "-XX:MaxMetaspaceSize="
-    - 128M
-  - - "-XX:MetaspaceSize="
-    - 64M
-  - - " "
-    - Prog
-`
+{
+    "version":"test",
+    "is_build_required":true,
+    "is_link_independent":false,
+    "source":{
+        "file":"prog",
+        "extension":"cpp"
+    },
+    "compile":{
+        "file":"prog",
+        "extension":"o",
+        "command":"g++",
+        "env":{
+            "PATH":"/usr/bin"
+        },
+        "allowed_command_line": null,
+        "fixed_command_line":[
+            ["-c", "prog.cpp"],
+            ["-o", "prog.o"]
+        ]
+    },
+    "run":{
+        "command":"./prog.out",
+        "env":null,
+        "allowed_command_line":null,
+        "fixed_command_line":null
+    }
+}`
 
 	profile, err := makeProcProfileFromBufAsJSON([]byte(file))
 	if err != nil {
@@ -73,8 +51,8 @@ run:
 		return
 	}
 
-	if profile.Version != "HEAD-2014.4.9.e912167e7ecf" {
-		t.Fatalf("profile.Version should be HEAD-2014.4.9.e912167e7ecf(but %v)", profile.Version)
+	if profile.Version != "test" {
+		t.Fatalf("profile.Version should be test(but %v)", profile.Version)
 	}
 
 
@@ -87,8 +65,7 @@ run:
 		t.Fatalf("profile.IsLinkIndependent should be false(but %v)", profile.IsLinkIndependent)
 	}
 
-
-	//log.Fatalf("--- t:\n%v\n\n", profile)
+	// TODO: add some assertion
 }
 
 
