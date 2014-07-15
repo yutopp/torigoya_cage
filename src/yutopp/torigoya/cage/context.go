@@ -17,6 +17,7 @@ import(
 	"os"
 	"os/user"
 	"path/filepath"
+    "os/exec"
 )
 
 type PackageUpdater interface {
@@ -105,7 +106,16 @@ func (ctx *Context) UpdatePackages() error {
 		return errors.New("Package Updater was not registerd")
 	}
 
-	return ctx.packageUpdater.Update()
+	err := ctx.packageUpdater.Update()
+
+    fmt.Printf("==================================================\n")
+	out, err := exec.Command("/bin/ls", "-laR", "/usr/local/torigoya").Output()
+	if err != nil {
+		fmt.Printf("error:: %s\n", err.Error())
+	} else {
+		fmt.Printf("passed:: %s\n", out)
+	}
+    return err
 }
 
 

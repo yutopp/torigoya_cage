@@ -67,7 +67,7 @@ run:
     - Prog
 `
 
-	profile, err := makeProcProfileFromBuf([]byte(file))
+	profile, err := makeProcProfileFromBufAsJSON([]byte(file))
 	if err != nil {
 		t.Fatalf("error: %v", err)
 		return

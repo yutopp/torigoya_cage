@@ -3,7 +3,7 @@ require 'colorize'
 require 'torigoya_kit'
 
 c = TorigoyaKit::Client.new("localhost", 49800)
-c.update_packages()
+#c.update_packages()
 c.reload_proc_table()
 
 #
@@ -176,7 +176,7 @@ test_paths.each do |dir_name|
   Dir.chdir(dir_name) do
     Dir.glob(File.join("testcase*.yml")) do |unit_path|
       begin
-        p unit_path
+        puts unit_path.red
 
         testcase = YAML.load_file(unit_path)
 
@@ -268,10 +268,15 @@ test_paths.each do |dir_name|
         ticket = c.exec_ticket(ticket)
         expected_ticket = TorigoyaKit::TicketResult.new(compile_expect, link_expect, run_expect)
 
-        assert_ticket(unit_path, ticket, expected_ticket)
+        assert_ticket("#{File.basename(dir_name)} - #{unit_path}", ticket, expected_ticket)
 
       rescue => e
-        p e, e.backtrace
+        p e
+=begin
+        e.backtrace.each do |b|
+          puts "== #{b}"
+        end
+=end
       end
     end
   end

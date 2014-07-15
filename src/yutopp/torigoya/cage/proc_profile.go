@@ -16,6 +16,7 @@ import (
 	"io/ioutil"
 	"path/filepath"
 	"net/http"
+	"encoding/json"
 
 	"gopkg.in/v1/yaml"
 	"github.com/mattn/go-shellwords"
@@ -25,7 +26,7 @@ import (
 // ==================================================
 type SelectableCommand struct {
 	Default		[]string
-	Select		[]string `yaml:"select,flow"`
+	Select		[]string `json:"select"`
 }
 
 func (sc *SelectableCommand) IsEmpty() bool { return sc.Default == nil || sc.Select == nil }
@@ -36,8 +37,8 @@ type PhaseDetail struct {
 	Extension				string
 	Command					string
 	Env						map[string]string
-	AllowedCommandLine		map[string]SelectableCommand `yaml:"allowed_command_line"`
-	FixedCommandLine		[][]string `yaml:"fixed_command_line"`
+	AllowedCommandLine		map[string]SelectableCommand `json:"allowed_command_line"`
+	FixedCommandLine		[][]string `json:"fixed_command_line"`
 }
 
 func (pd *PhaseDetail) MakeCompleteArgs(
@@ -111,8 +112,8 @@ func (pd *PhaseDetail) isValidOption(selected_option []string) error {
 
 type ProcProfile struct {
 	Version						string
-	IsBuildRequired				bool `yaml:"is_build_required"`
-	IsLinkIndependent			bool `yaml:"is_link_independent"`
+	IsBuildRequired				bool `json:"is_build_required"`
+	IsLinkIndependent			bool `json:"is_link_independent"`
 
 	Source, Compile, Link, Run	PhaseDetail
 }
@@ -139,10 +140,10 @@ type ProcConfigUnit struct {
 
 // ==================================================
 // ==================================================
-func makeProcProfileFromBuf(buffer []byte) (ProcProfile, error) {
+func makeProcProfileFromBufAsJSON(buffer []byte) (ProcProfile, error) {
 	profile := ProcProfile{}
 
-	if err := yaml.Unmarshal(buffer, &profile); err != nil {
+	if err := json.Unmarshal(buffer, &profile); err != nil {
 		return profile, err
 	}
 
@@ -155,7 +156,12 @@ func makeProcProfileFromPath(filepath string) (ProcProfile, error) {
 		return ProcProfile{}, err
 	}
 
-	return makeProcProfileFromBuf(b)
+	pt, err := makeProcProfileFromBufAsJSON(b);
+	if err != nil {
+		return pt, errors.New(fmt.Sprintf("In [%s] : %v", filepath, err))
+	}
+
+	return pt, nil
 }
 
 
@@ -175,7 +181,12 @@ func makeProcDescriptionListFromPath(filepath string) (ProcDescriptionList, erro
 		return nil, err
 	}
 
-	return makeProcDescriptionListFromBuf(b)
+	pdl, err := makeProcDescriptionListFromBuf(b)
+	if err != nil {
+		return pdl, errors.New(fmt.Sprintf("In [%s] : %v", filepath, err))
+	}
+
+	return pdl, nil
 }
 
 
