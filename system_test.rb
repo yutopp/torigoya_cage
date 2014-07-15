@@ -94,40 +94,62 @@ class TicketTest
     start_t = Time.now
 
     # compile
-    unless result.compile.nil? && expected.compile.nil?
+    unless expected.compile.nil?
       puts "== checking compile section".blue
-      assert_result_unit(result.compile, expected.compile)
+      unless result.compile.nil?
+        assert_result_unit(result.compile, expected.compile)
+      else
+        puts "FAILED: result of compile is nil".red
+        @failed += 1
+      end
     else
       puts "== skipped compile section".yellow
       @skipped += 1
     end
 
     # link
-    unless result.link.nil? && expected.link.nil?
+    unless expected.link.nil?
       puts "== checking link section".blue
-      assert_result_unit(result.link, expected.link)
+      unless result.link.nil?
+        assert_result_unit(result.link, expected.link)
+      else
+        puts "FAILED: result of link is nil".red
+        @failed += 1
+      end
     else
       puts "== skipped link section".yellow
       @skipped += 1
     end
 
     # run
-    unless result.run.nil? && expected.run.nil?
+    unless expected.run.nil?
       puts "== checking run section".blue
-      if result.run.size == expected.run.size
-        expected.run.each do |(k, v)|
-          puts "== checking run section [#{k}]".blue
-          if result.run.has_key?(k)
-            assert_result_unit(result.run[k], v)
-          else
-            puts "FAILED: result has not expected index [#{k}]".red
-            @failed += 1
+      unless result.run.nil?
+        if result.run.size == expected.run.size
+          expected.run.each do |(k, v)|
+            puts "== checking run section [#{k}]".blue
+            if result.run.has_key?(k)
+              unless result.run[k].nil?
+                assert_result_unit(result.run[k], v)
+              else
+                puts "FAILED: result of run [#{k}] is nil".red
+                @failed += 1
+              end
+            else
+              puts "FAILED: result has not expected index [#{k}]".red
+              @failed += 1
+            end
           end
+        else
+          puts "FAILED: numbers of run values are different(result[#{result.run.size}] != expected[#{expected.run.size}])".red
+          @failed += 1
         end
+
       else
-        puts "FAILED: numbers of run values are different(result[#{result.run.size}] != expected[#{expected.run.size}])".red
+        puts "FAILED: result of run is nil".red
         @failed += 1
       end
+
     else
       puts "== skipped run section".yellow
       @skipped += 1
