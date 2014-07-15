@@ -3,8 +3,8 @@ require 'colorize'
 require 'torigoya_kit'
 
 c = TorigoyaKit::Client.new("localhost", 49800)
-#p c.update_packages()
-#p c.exec_ticket(make_ticket())
+c.update_packages()
+c.reload_proc_table()
 
 #
 testcases_path = File.join(File.expand_path(File.dirname(__FILE__)), "torigoya_proc_profiles/_testcases")
@@ -177,7 +177,7 @@ test_paths.each do |dir_name|
     Dir.glob(File.join("testcase*.yml")) do |unit_path|
       begin
         p unit_path
-        next unless unit_path == "testcase.1-2.065.0.yml"
+
         testcase = YAML.load_file(unit_path)
 
         # source
@@ -264,9 +264,7 @@ test_paths.each do |dir_name|
                                          build_inst,
                                          run_inst
                                          )
-        #p ticket
-        #c.update_packages()
-        #c.reload_proc_table()
+        # execute ticket
         ticket = c.exec_ticket(ticket)
         expected_ticket = TorigoyaKit::TicketResult.new(compile_expect, link_expect, run_expect)
 

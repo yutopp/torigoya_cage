@@ -37,15 +37,15 @@ echo "Torigoya system_test: exec $extra_commands"
 ./docker.build.sh &&
 echo "start container => " &&
 sudo docker run \
-    --expose 49800 \
-    -p 49800:23432 \
-    -v $cwd/config.yml:/opt/cage/config.yml \
-    -v $cwd/torigoya_proc_profiles:/opt/cage/proc_profiles \
-    -v $cwd/files/packages:/usr/local/torigoya \
-    -v $packages_list_path:/etc/apt/sources.list.d/torigoya-packages.list \
-    $extra_commands \
-    --name torigoya_cage \
-    --workdir /opt/cage \
-    --privileged \
-    torigoya/cage \
-    bin/cage --mode system_test_mode
+     --expose 49800 \
+     -p 49800:23432 \
+     -v $cwd/config.yml:/opt/cage/config.yml \
+     -v $cwd/torigoya_proc_profiles:/opt/cage/proc_profiles \
+     -v $cwd/files/packages:/usr/local/torigoya \
+     -v $packages_list_path:/etc/apt/sources.list.d/torigoya-packages.list \
+     $extra_commands \
+     --name torigoya_cage \
+     --workdir /opt/cage \
+     --privileged \
+     torigoya/cage \
+     bin/cage --mode system_test_mode
