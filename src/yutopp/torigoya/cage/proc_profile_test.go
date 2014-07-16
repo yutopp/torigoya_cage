@@ -166,6 +166,20 @@ func TestLoadProcConfigs(t *testing.T) {
 	_ = configs
 }
 
+func TestFindProcTable1(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+	configs, err := LoadProcConfigs(filepath.Join(gopath, "files", "proc_profiles_for_core_test"))
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	_, err = configs.Find(0, "!=head")
+	if err != nil {
+		t.Fatalf(err.Error())
+	}
+}
+
 
 func TestCmdLine(t *testing.T) {
 	pd := PhaseDetail{

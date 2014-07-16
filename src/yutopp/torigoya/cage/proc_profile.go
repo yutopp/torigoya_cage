@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"io"
+	"regexp"
 	"io/ioutil"
 	"path/filepath"
 	"net/http"
@@ -22,6 +23,16 @@ import (
 	"github.com/mattn/go-shellwords"
 )
 
+
+// ==================================================
+var headVersionPattern = regexp.MustCompile("^HEAD-")
+var devVersionPattern = regexp.MustCompile("^DEV-")
+var stableVersionPattern = regexp.MustCompile("^STABLE-")
+var specialRecuest = map[string]*regexp.Regexp{
+	"!=head": headVersionPattern,
+	"!=dev": devVersionPattern,
+	"!=stable": stableVersionPattern,
+}
 
 // ==================================================
 type SelectableCommand struct {
@@ -247,12 +258,21 @@ func (pt *ProcConfigTable) Find(proc_id uint64, proc_version string) (*ProcProfi
 		return nil, errors.New("This proc_id is not registerd")
 	}
 
-	proc_profile, ok := proc_unit.Versioned[proc_version]
-	if !ok {
+	if reg, ok := specialRecuest[proc_version]; ok {
+		for k, v := range proc_unit.Versioned {
+			if reg.MatchString(k) {
+				return &v, nil
+			}
+		}
 		return nil, errors.New("This proc_version is not registerd")
-	}
 
-	return &proc_profile, nil
+	} else {
+		proc_profile, ok := proc_unit.Versioned[proc_version]
+		if !ok {
+			return nil, errors.New("This proc_version is not registerd")
+		}
+		return &proc_profile, nil
+	}
 }
 
 
