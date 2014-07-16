@@ -1,10 +1,18 @@
 require 'yaml'
 require 'colorize'
 require 'torigoya_kit'
+require 'optparse'
 
+opt = OptionParser.new
+cases = nil
+opt.on('-c CASES', Array) {|v| cases = v }
+opt.parse!(ARGV)
+
+#
 c = TorigoyaKit::Client.new("localhost", 49800)
-#c.update_packages()
+c.update_packages()
 c.reload_proc_table()
+
 
 #
 testcases_path = File.join(File.expand_path(File.dirname(__FILE__)), "torigoya_proc_profiles/_testcases")
@@ -174,6 +182,10 @@ end
 
 test_paths.each do |dir_name|
   Dir.chdir(dir_name) do
+    unless cases.nil?
+      next unless cases.any? {|c| /#{c}/ =~ dir_name}
+    end
+
     Dir.glob(File.join("testcase*.yml")) do |unit_path|
       begin
         puts unit_path.red
@@ -272,10 +284,11 @@ test_paths.each do |dir_name|
 
       rescue => e
         p e
-=begin
+#=begin
         e.backtrace.each do |b|
           puts "== #{b}"
         end
+=begin
 =end
       end
     end
