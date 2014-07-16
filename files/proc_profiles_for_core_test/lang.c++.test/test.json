@@ -15,8 +15,8 @@
         },
         "allowed_command_line": null,
         "fixed_command_line":[
-            ["-c", "prog.cpp"],
-            ["-o", "prog.o"]
+            ["-c ", "prog.cpp"],
+            ["-o ", "prog.o"]
         ]
     },
     "link":{
@@ -28,7 +28,7 @@
         },
         "fixed_command_line":[
             ["prog.o"],
-            ["-o", "prog.out"]
+            ["-o ", "prog.out"]
         ]
     },
     "run":{

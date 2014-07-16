@@ -195,8 +195,9 @@ func TestCmdLine(t *testing.T) {
 			"-E": SelectableCommand{},
 		},
 		FixedCommandLine: [][]string{
-			[]string{ "-c", "prog.cpp" },
-			[]string{ "-o", "prog.o" },
+			[]string{ "-c ", "prog.cpp" },
+			[]string{ "-o ", "prog.o" },
+			[]string{ "-of", "prog" },
 		},
 	}
 
@@ -205,7 +206,7 @@ func TestCmdLine(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 
-	var expected = []string{"g++", "-std=", "c++1y", "-E", "-c", "prog.cpp", "-o", "prog.o", "hogefuga", "foo bar", "-c=2"}
+	var expected = []string{"g++", "-std=c++1y", "-E", "-c", "prog.cpp", "-o", "prog.o", "-ofprog", "hogefuga", "foo bar", "-c=2"}
 	if len(cmd) != len(expected) { t.Fatalf("expected %v (but %v)", expected, cmd) }
 	for i, _ := range expected {
 		if cmd[i] != expected[i] { t.Fatalf("expected %v (but %v)", expected, cmd) }

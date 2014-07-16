@@ -392,7 +392,6 @@ func (ctx *Context) mapSources(
 
 	//
 	default_filename := fmt.Sprintf("%s.%s", proc_profile.Source.File, proc_profile.Source.Extension)
-	fmt.Printf("DEFEDEDEAFAWF   %s", default_filename)
 
 	//
 	if _, err := ctx.createMultipleTargetsWithDefaultName(

@@ -11,6 +11,7 @@ package torigoya
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"os"
 	"io"
 	"regexp"
@@ -72,12 +73,13 @@ func (pd *PhaseDetail) MakeCompleteArgs(
 
 	// selected user commands(structured)
 	for _, v := range selected_options {
-		args = append(args, v...)
+		fmt.Printf("")
+		args = append(args, argCat(v)...)
 	}
 
 	// fixed commands
 	for _, v := range pd.FixedCommandLine {
-		args = append(args, v...)
+		args = append(args, argCat(v)...)
 	}
 
 	// user command
@@ -88,6 +90,20 @@ func (pd *PhaseDetail) MakeCompleteArgs(
 	args = append(args, u_args...)
 
 	return args, nil
+}
+
+func argCat(v []string) []string {
+	// TODO: check length of array
+	if len(v) == 2 {
+		k := v[0]
+		if k[len(k)-1] == ' ' {
+			return []string{strings.TrimSpace(k), v[1]}
+		} else {
+			return []string{k+v[1]}
+		}
+	} else {
+		return v
+	}
 }
 
 func (pd *PhaseDetail) isValidOption(selected_option []string) error {

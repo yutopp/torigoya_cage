@@ -12,4 +12,4 @@ sudo docker run \
     --workdir /opt/cage \
     --privileged \
     torigoya/cage \
-    ./host.run_core_test.sh
+    ./host.unittest.sh
