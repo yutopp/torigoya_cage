@@ -21,4 +21,4 @@ sudo docker run \
      --workdir /opt/cage \
      --privileged \
      torigoya/cage \
-     bin/cage --mode release
+     bin/cage.server --mode release

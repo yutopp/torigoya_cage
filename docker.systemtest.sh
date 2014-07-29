@@ -48,4 +48,4 @@ sudo docker run \
      --workdir /opt/cage \
      --privileged \
      torigoya/cage \
-     bin/cage --mode system_test_mode
+     bin/cage.server --mode system_test_mode
