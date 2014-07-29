@@ -11,7 +11,7 @@ package main
 import (
 	"os"
 
-	"yutopp/torigoya/cage"
+	"yutopp/cage"
 )
 
 

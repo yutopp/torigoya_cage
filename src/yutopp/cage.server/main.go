@@ -16,7 +16,7 @@ import (
 	"os"
 	"io/ioutil"
 
-	"yutopp/torigoya/cage"
+	"yutopp/cage"
 
 	"gopkg.in/v1/yaml"
 )
