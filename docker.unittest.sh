@@ -6,8 +6,8 @@ cwd=`pwd`
 ./docker.build.sh &&
 echo "start container => " &&
 sudo docker run \
-    -v $cwd/files/proc_profiles_for_core_test:/opt/cage/files/proc_profiles_for_core_test \
-    -v $cwd/host.run_core_test.sh:/opt/cage/host.run_core_test.sh \
+    -v $cwd/files/proc_profiles_for_core_test/:/opt/cage/files/proc_profiles_for_core_test/ \
+    -v $cwd/host.unittest.sh:/opt/cage/host.unittest.sh \
     --name torigoya_cage \
     --workdir /opt/cage \
     --privileged \

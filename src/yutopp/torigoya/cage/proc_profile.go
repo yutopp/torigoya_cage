@@ -74,7 +74,6 @@ func (pd *PhaseDetail) MakeCompleteArgs(
 
 	// selected user commands(structured)
 	for _, v := range selected_options {
-		fmt.Printf("")
 		args = append(args, argCat(v)...)
 	}
 
@@ -231,7 +230,7 @@ func globProfiles(proc_path string) (map[string]ProcProfile, error) {
 		}
 
 		// only json files will be accepted
-		if filepath.Ext(path) != "json" {
+		if filepath.Ext(path) != ".json" {
 			return nil
 		}
 
@@ -286,7 +285,7 @@ func (pt *ProcConfigTable) Find(proc_id uint64, proc_version string) (*ProcProfi
 				return &v, nil
 			}
 		}
-		return nil, errors.New("This proc_version is not registerd")
+		return nil, errors.New("This proc_version(special) is not registerd")
 
 	} else {
 		proc_profile, ok := proc_unit.Versioned[proc_version]
