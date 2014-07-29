@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"strings"
 	"os"
+	"os/exec"
 	"io"
 	"regexp"
 	"io/ioutil"
@@ -229,6 +230,11 @@ func globProfiles(proc_path string) (map[string]ProcProfile, error) {
 			return nil
 		}
 
+		// only json files will be accepted
+		if filepath.Ext(path) != "json" {
+			return nil
+		}
+
 		proc_profile, err := makeProcProfileFromPath(path)
 		if err != nil {
 			return err;
@@ -292,21 +298,29 @@ func (pt *ProcConfigTable) Find(proc_id uint64, proc_version string) (*ProcProfi
 }
 
 
-func (pt *ProcConfigTable) UpdateFromWeb(address string) error {
+func (pt *ProcConfigTable) UpdateFromWeb(address string, base_path string) error {
+	// make temporary file to save zip file
 	tmp_file, err := ioutil.TempFile("", "torigoya_tmp_")
 	if err != nil {
 		return errors.New("ProcConfigTable.ProcConfigTable error: " + err.Error())
 	}
 
+	// get data from web
 	response, err := http.Get(address)
 	if err != nil {
 		return errors.New("ProcConfigTable.ProcConfigTable error: " + err.Error())
 	}
 	defer response.Body.Close()
 
+	// copy binary to the temporary file
 	if _, err := io.Copy(tmp_file, response.Body); err != nil {
 		return errors.New("ProcConfigTable.ProcConfigTable error: " + err.Error())
 	}
 
-	return nil
+	// extract to...
+	// -o: force extract
+	// -d: target dir
+	cmd := exec.Command("unzip", "-o", tmp_file.Name(), "-d", "files")
+
+	return cmd.Run()
 }

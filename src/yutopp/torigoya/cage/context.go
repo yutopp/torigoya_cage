@@ -83,7 +83,8 @@ func InitContext(
 	// LoadProcConfigTable
 	proc_conf_table, err := LoadProcConfigs(proc_config_path)
 	if err != nil {
-		return nil, err
+		// make no error if table coulnd't be loaded
+		proc_conf_table = nil
 	}
 
 	//
@@ -101,6 +102,11 @@ func InitContext(
 }
 
 
+func (ctx *Context) HasProcTable() bool {
+	return ctx.procConfTable != nil
+}
+
+
 func (ctx *Context) UpdatePackages() error {
 	if ctx.packageUpdater == nil {
 		return errors.New("Package Updater was not registerd")
@@ -108,13 +114,16 @@ func (ctx *Context) UpdatePackages() error {
 
 	err := ctx.packageUpdater.Update()
 
-    fmt.Printf("==================================================\n")
-	out, err := exec.Command("/bin/ls", "-laR", "/usr/local/torigoya").Output()
+	// TODO: fix it
+    fmt.Printf("= /usr/local/torigoya ============================\n")
+	out, err := exec.Command("/bin/ls", "-la", "/usr/local/torigoya").Output()
 	if err != nil {
 		fmt.Printf("error:: %s\n", err.Error())
 	} else {
 		fmt.Printf("passed:: %s\n", out)
 	}
+	fmt.Printf("==================================================\n")
+
     return err
 }
 
@@ -133,5 +142,9 @@ func (ctx *Context) ReloadProcTable() error {
 }
 
 func (ctx *Context) UpdateProcTable() error {
-	return ctx.procConfTable.UpdateFromWeb(ctx.procSrcZipAddress)
+	if err := ctx.procConfTable.UpdateFromWeb(ctx.procSrcZipAddress, ctx.basePath); err != nil {
+		return err
+	}
+
+	return ctx.ReloadProcTable()
 }

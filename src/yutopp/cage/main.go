@@ -110,6 +110,17 @@ func main() {
 		log.Panicf(err.Error())
 	}
 
+	if !ctx.HasProcTable() {
+		log.Printf("Try to download/reload proc_table...\n")
+		if err := ctx.UpdateProcTable(); err != nil {
+			log.Panicf(err.Error())
+		}
+		if !ctx.HasProcTable() {
+			log.Panicf("unexpected: assertion failed...")
+		}
+		log.Printf("Finished to download/reload proc_table...\n")
+	}
+
 	//
 	log.Printf("Server initializing...\n")
 	e := make(chan error)

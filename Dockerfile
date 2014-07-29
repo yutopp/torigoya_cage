@@ -8,8 +8,7 @@ RUN apt-get -y update
 RUN apt-get -y upgrade
 
 RUN apt-get -y install golang g++
-RUN apt-get -y install git
-RUN apt-get -y install make
+RUN apt-get -y install git make unzip
 RUN if [ ! -e /opt/cage ]; then mkdir -p /opt/cage; fi
 
 ADD host.get_packages.sh /opt/cage/host.get_packages.sh
