@@ -48,7 +48,7 @@ func managedExec(
 	stdin_file_path		*string,
 ) (*ExecutedResult, error) {
 	// make a pipe for error reports
-	error_pipe, err := makePipe()
+	error_pipe, err := makePipeCloseOnExec()
 	if err != nil { return nil, err }
 	defer error_pipe.Close()
 
@@ -58,7 +58,7 @@ func managedExec(
 		return nil, err;
 	}
 	if pid == 0 {
-		// child process
+		// !! call child process !!
 		managedExecChild(rl, p, *error_pipe, args, envs, umask, stdin_file_path)
 		return nil, nil
 
@@ -216,16 +216,26 @@ func managedExecChild(
 	log.Printf("== Managed: fsize           (%v)\n", rl.FSize)
 
 
+	fmt.Printf("==bash -c \"ps -ef | wc -l\" =====================\n")
+	out, err := exec.Command("/bin/bash", "-c", "ps -ef | wc -l").Output()
+	if err != nil {
+		fmt.Printf("error:: %s\n", err.Error())
+	} else {
+		fmt.Printf("passed:: %s\n", out)
+	}
+
+
+
 
 	//
-	setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
-	setLimit(C.RLIMIT_NOFILE, 1024)		// Process can open 1024 files
-	setLimit(C.RLIMIT_NPROC, 500)		// Process can create processes to 500
-	setLimit(C.RLIMIT_MEMLOCK, 1024)	// Process can lock 1024 Bytes by mlock(2)
-
-	setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)
-	setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes [be careful!]
-	setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only FSize Bytes
+ 	setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
+ 	setLimit(C.RLIMIT_NOFILE, 512)		// Process can open 512 files
+ 	setLimit(C.RLIMIT_NPROC, 1250)		// Process can create processes to 30
+ 	setLimit(C.RLIMIT_MEMLOCK, 1024)	// Process can lock 1024 Bytes by mlock(2)
+//
+ 	setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)
+ 	setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes [be careful!]
+ 	setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only FSize Bytes
 
 	//
 	syscall.Umask(umask)

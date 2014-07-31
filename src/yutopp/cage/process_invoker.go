@@ -102,6 +102,7 @@ func invokeProcessClonerBase(
 
 
 	// Start Process
+	// TODO: rewrite forc/exec to attach close-on-exec to pipe...
 	if err := cmd.Start(); err != nil {
 		log.Fatal(err)
 		return nil, err

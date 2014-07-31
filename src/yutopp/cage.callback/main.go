@@ -14,7 +14,6 @@ import (
 	"yutopp/cage"
 )
 
-
 func main() {
 	println("cage.callback booted")
 
@@ -24,6 +23,7 @@ func main() {
 		panic("arguments are invalid")
 	}
 
+	//
 	bm, err := torigoya.DecodeBridgeMessage(packed_torigoya_content)
 	if err != nil {
 		panic(err)

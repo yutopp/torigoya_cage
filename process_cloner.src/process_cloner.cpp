@@ -29,11 +29,11 @@ static_assert( sizeof( pid_t ) == sizeof( int ), "sizeof( pid_t ) != sizeof( int
 //
 int fork_shell( void* /* unused */ )
 {
-    // mount procfs
-    //::mount( "procfs", "/proc", "proc", 0, nullptr );
-
-    // change "callee" process name
-    //::prctl( PR_SET_NAME, "torigoya bridge" );
+    // mount procfs (IMPORTANT)
+    if ( ::mount( "", "/proc", "proc", 0, nullptr ) == -1 ) {
+        std::cerr << "Failed to mount procfs." << std::endl;
+        return -1;
+    }
 
     //
     char* const callback_executable_r = getenv( "callback_executable" );
@@ -48,8 +48,9 @@ int fork_shell( void* /* unused */ )
 */
     // construct envs
     char const* const command = callback_executable_r;
+    char process_name[] = "d=(^o^)=b";
     char *exargv[] = {
-        callback_executable_r,
+        process_name,
         nullptr
     };
 

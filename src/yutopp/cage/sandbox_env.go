@@ -125,7 +125,8 @@ func buildChrootEnv(
 
 
 		// mount procfs
-		if err := os.MkdirAll("proc", 0755); err != nil {
+
+		if err := os.MkdirAll("proc", 0555); err != nil {
 			return errors.New(fmt.Sprintf("failed to mkdir proc (%s)", err))
 		}
 		if err := syscall.Mount(
@@ -158,19 +159,19 @@ func buildChrootEnv(
 			return errors.New(fmt.Sprintf("failed to mkdir dev (%s)", err))
 		}
 
-		if err := syscall.Mknod("dev/null", syscall.S_IFCHR|0666, int(C.devno(1, 3))); err != nil {
+		if err := makeNode("dev/null", int(C.devno(1, 3)), 0666); err != nil {
 			return errors.New(fmt.Sprintf("failed to mknod dev/null (%s)", err))
 		}
-		if err := syscall.Mknod("dev/zero", syscall.S_IFCHR|0666, int(C.devno(1, 5))); err != nil {
+		if err := makeNode("dev/zero", int(C.devno(1, 5)), 0666); err != nil {
 			return errors.New(fmt.Sprintf("failed to mknod dev/zero (%s)", err))
 		}
-		if err := syscall.Mknod("dev/full", syscall.S_IFCHR|0666, int(C.devno(1, 7))); err != nil {
+		if err := makeNode("dev/full", int(C.devno(1, 7)), 0666); err != nil {
 			return errors.New(fmt.Sprintf("failed to mknod dev/full (%s)", err))
 		}
-		if err := syscall.Mknod("dev/random", syscall.S_IFCHR|0644, int(C.devno(1, 8))); err != nil {
+		if err := makeNode("dev/random", int(C.devno(1, 8)), 0644); err != nil {
 			return errors.New(fmt.Sprintf("failed to mknod dev/random (%s)", err))
 		}
-		if err := syscall.Mknod("dev/urandom", syscall.S_IFCHR|0644, int(C.devno(1, 9))); err != nil {
+		if err := makeNode("dev/urandom", int(C.devno(1, 9)), 0644); err != nil {
 			return errors.New(fmt.Sprintf("failed to mknod dev/urandom (%s)", err))
 		}
 	}
@@ -204,5 +205,15 @@ func buildChrootEnv(
 
 	log.Printf("<- buildChrootEnv");
 
+	return nil
+}
+
+func makeNode(nodename string, dev int, perm os.FileMode) error {
+	if err := syscall.Mknod(nodename, syscall.S_IFCHR, dev); err != nil {
+		return errors.New(fmt.Sprintf("failed to mknod %s (%s)", nodename, err.Error()))
+	}
+	if err := os.Chmod(nodename, perm); err != nil {
+		return errors.New(fmt.Sprintf("failed to chmod %s (%v)", nodename, perm))
+	}
 	return nil
 }

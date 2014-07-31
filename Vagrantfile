@@ -25,5 +25,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
 
   #
-  config.vm.provision :shell, :inline => "cp /vagrant/torigoya-packages.list /etc/apt/sources.list.d/."
+  config.vm.provision :shell, :inline => ["cp /vagrant/files/torigoya-packages.list /etc/apt/sources.list.d/.",
+                                          "sudo apt-get -y update",
+                                          "sudo apt-get -y upgrade",
+                                          "sudo apt-get -y install golang build-essential git",
+                                         ].join("; ")
 end

@@ -22,8 +22,16 @@ type Pipe struct {
 }
 
 func makePipe() (*Pipe, error) {
+	return makePipeWithFlags(0)
+}
+
+func makePipeCloseOnExec() (*Pipe, error) {
+	return makePipeWithFlags(syscall.O_CLOEXEC)
+}
+
+func makePipeWithFlags(flags int) (*Pipe, error) {
 	pipe := make([]int, 2)
-	if err := syscall.Pipe(pipe); err != nil {
+	if err := syscall.Pipe2(pipe, flags); err != nil {
 		return nil, err
 	}
 
