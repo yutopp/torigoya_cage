@@ -211,8 +211,8 @@ func readPipeAsync(
 			}
 
 		} else {
-			log.Printf("= %d ==> %d", fd, size)
-			log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[:size]))
+			//log.Printf("= %d ==> %d", fd, size)
+			//log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[:size]))
 
 			//
 			copied := make([]byte, size)

@@ -178,7 +178,7 @@ func managedExec(
 				}
 			}
 
-		case <-time.After(time.Duration(rl.CPU * 2) * time.Second):
+		case <-time.After(time.Duration(rl.CPU * 2 + 20) * time.Second):
 			// timeout(e.g. when process uses sleep a lot)
 			return nil, errors.New("TLE")
 		}
@@ -227,12 +227,10 @@ func managedExecChild(
 	}
 
 
-
-
 	//
  	setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
  	setLimit(C.RLIMIT_NOFILE, 512)		// Process can open 512 files
- 	setLimit(C.RLIMIT_NPROC, 1250)		// Process can create processes to 30
+	setLimit(C.RLIMIT_NPROC, 30)		// Process can create processes to 30
  	setLimit(C.RLIMIT_MEMLOCK, 1024)	// Process can lock 1024 Bytes by mlock(2)
 //
  	setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)

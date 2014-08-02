@@ -515,7 +515,7 @@ func TestTicketRepeat(t *testing.T) {
 	}
 
 	//
-	base_name := "aaa7" + strconv.FormatInt(time.Now().Unix(), 10)
+	base_name := "aaa8" + strconv.FormatInt(time.Now().Unix(), 10)
 
 	//
 	sources := []*SourceData{
