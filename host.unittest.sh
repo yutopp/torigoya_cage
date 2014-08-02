@@ -4,4 +4,4 @@ echo "Torigoya test: build packages..."
 ./host.build.sh || exit -1
 
 echo "Torigoya test: run unittest..."
-sudo GOPATH=`pwd` go test -v yutopp/cage -test.run="TestTicketRepeat"
+sudo GOPATH=`pwd` go test -v yutopp/cage
