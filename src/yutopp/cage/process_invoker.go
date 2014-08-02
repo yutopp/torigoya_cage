@@ -63,11 +63,12 @@ func invokeProcessClonerBase(
 
 	// TODO: close on exec
 	// pipe for
-	stdout_pipe, err := makePipe()
+	stdout_pipe, err := makePipeNonBlocking()
 	if err != nil { return nil, err }
 	defer stdout_pipe.Close()
 
-	stderr_pipe, err := makePipe()
+
+	stderr_pipe, err := makePipeNonBlocking()
 	if err != nil { return nil, err }
 	defer stderr_pipe.Close()
 
@@ -108,6 +109,10 @@ func invokeProcessClonerBase(
 		return nil, err
 	}
 
+	//
+	stdout_pipe.CloseWrite()
+	stderr_pipe.CloseWrite()
+
 	// wait for exit process
 	process_wait_c := make(chan error)
 	go func() {
@@ -115,32 +120,41 @@ func invokeProcessClonerBase(
 	}()
 
 	// read stdout/stderr
-	stdout_c := make(chan error)
-	go readPipeAsync(stdout_pipe.ReadFd, stdout_c, StdoutFd, output_stream)
-	stderr_c := make(chan error)
-	go readPipeAsync(stderr_pipe.ReadFd, stderr_c, StderrFd, output_stream)
+	force_close_out := make(chan bool)
+	stdout_err := make(chan error)
+	go readPipeAsync(stdout_pipe.ReadFd, stdout_err, StdoutFd, force_close_out, output_stream)
+	force_close_err := make(chan bool)
+	stderr_err := make(chan error)
+	go readPipeAsync(stderr_pipe.ReadFd, stderr_err, StderrFd, force_close_err, output_stream)
 
 	//
 	defer func() {
-		// force close
-		stdout_pipe.Close()
-		stderr_pipe.Close()
+		close(process_wait_c)
+
+		force_close_out <- true
+		force_close_err <- true
 
 		// block
-		<- stdout_c
-		<- stderr_c
+		if err := <-stdout_err; err != nil {
+			log.Printf("??STDOUT ERROR: %v\n", err)
+		}
+		close(force_close_out)
+
+		if err := <-stderr_err; err != nil {
+			log.Printf("??STDERR ERROR: %v\n", err)
+		}
+		close(force_close_err)
 	}()
 
 	// wait for finishing subprocess
 	select {
 	case err := <-process_wait_c:
 		// subprocess has been finished
-		log.Printf("MYAN %v", err)
+		log.Printf("!! CHILD PROCESS IS FINISHED %v", err)
 		if err != nil {
 			return nil, err
 		}
 
-		log.Printf("?? %v", cmd.ProcessState.Success())
 		if !cmd.ProcessState.Success() {
 			return nil, errors.New("Process finished with failed state")
 		}
@@ -161,18 +175,42 @@ func invokeProcessClonerBase(
 	}
 }
 
-func readPipeAsync(fd int, cs chan<-error, output_fd OutFd, output_stream chan<-StreamOutput) {
-	buffer := make([]byte, 1024)
+func readPipeAsync(
+	fd int,
+	cs chan<-error,
+	output_fd OutFd,
+	force_close_ch <-chan bool,
+	output_stream chan<-StreamOutput,
+) {
+	buffer := make([]byte, 2048)
 	defer close(cs)
 
+	force_close_f := false
+
 	for {
-		size, err := syscall.Read(fd, buffer)
-		if err != nil {
-			cs <- err
-			return
+		select {
+		case f := <-force_close_ch:
+			force_close_f = f
+		default:
 		}
 
-		if size != 0 {
+		size, err := syscall.Read(fd, buffer)
+		//log.Printf("=================== %v / = %v", size, err)
+		if err != nil {
+			if err != syscall.EAGAIN {
+				cs <- err
+				return
+			}
+		}
+
+		if size <= 0 {
+			// not error, there is no data to read
+			if force_close_f {
+				cs <- nil
+				return
+			}
+
+		} else {
 			log.Printf("= %d ==> %d", fd, size)
 			log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[:size]))
 
@@ -188,11 +226,12 @@ func readPipeAsync(fd int, cs chan<-error, output_fd OutFd, output_stream chan<-
 		}
 	}
 
+
 	cs <- nil
 }
 
 func readPipe(fd int) (result []byte, err error) {
-	buffer := make([]byte, 1024)
+	buffer := make([]byte, 2048)
 
 	for {
 		size, err := syscall.Read(fd, buffer)

@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"time"
 	"strconv"
+	"bytes"
 )
 
 
@@ -305,7 +306,7 @@ int main() {
 
 
 
-func TestTicket(t *testing.T) {
+func TestTicketBasic(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
 	if err != nil {
@@ -384,7 +385,7 @@ int main() {
 	// execute
 	var result test_result
 	result.run = make(map[int]*test_result_unit)
-	f := makehelperCallback(&result)
+	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
 		return
@@ -399,12 +400,12 @@ int main() {
 		link: test_result_unit{
 		},
 		run: map[int]*test_result_unit{
-		0: &test_result_unit{
-			out: "hello!\ninput is 0\n",
-		},
-		1: &test_result_unit{
-			out: "hello!\ninput is 100\n",
-		},
+			0: &test_result_unit{
+				out: []byte("hello!\ninput is 0\n"),
+			},
+			1: &test_result_unit{
+				out: []byte("hello!\ninput is 100\n"),
+			},
 		},
 	}
 
@@ -412,19 +413,242 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 
+
+func TestTicketTLE(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	base_name := "aaa7" + strconv.FormatInt(time.Now().Unix(), 10)
+
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
+#include <iostream>
+
+int main() {
+	for(;;);
+}
+`),
+			false,
+		},
+	}
+
+	//
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			CpuTimeLimit: 3,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			CpuTimeLimit: 3,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+	}
+
+	//
+	run_inst := &RunInstruction{
+		Inputs: []Input{
+			Input{
+				stdin: nil,
+				setting: &ExecutionSetting{
+					CpuTimeLimit: 1,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
+		},
+	}
+
+	//
+	ticket := &Ticket{
+		BaseName: base_name,
+		ProcId: 0,
+		ProcVersion: "test",
+		Sources: sources,
+		BuildInst: build_inst,
+		RunInst: run_inst,
+	}
+
+	// execute
+	var result test_result
+	result.run = make(map[int]*test_result_unit)
+	f := makeHelperCallback(&result)
+	if err := ctx.ExecTicket(ticket, f); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	t.Logf("%V", result)
+
+	//
+	expect_result := test_result{
+		compile: test_result_unit{
+		},
+		link: test_result_unit{
+		},
+		run: map[int]*test_result_unit{
+			0: &test_result_unit{
+				result: &ExecutedResult {
+					Status: Error,
+				},
+			},
+		},
+	}
+
+	//
+	assertTestResult(t, &result, &expect_result)
+}
+
+
+func TestTicketRepeat(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	base_name := "aaa7" + strconv.FormatInt(time.Now().Unix(), 10)
+
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
+#include <iostream>
+
+int main() {
+	for(int i=0; i<200000; ++i) std::cout << i << "\n" << std::flush;
+}
+`),
+			false,
+		},
+	}
+
+	//
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			CpuTimeLimit: 3,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			CpuTimeLimit: 3,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+	}
+
+	//
+	run_inst := &RunInstruction{
+		Inputs: []Input{
+			Input{
+				stdin: nil,
+				setting: &ExecutionSetting{
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
+		},
+	}
+
+	//
+	ticket := &Ticket{
+		BaseName: base_name,
+		ProcId: 0,
+		ProcVersion: "test",
+		Sources: sources,
+		BuildInst: build_inst,
+		RunInst: run_inst,
+	}
+
+	// execute
+	var result test_result
+	result.run = make(map[int]*test_result_unit)
+	f := makeHelperCallback(&result)
+	if err := ctx.ExecTicket(ticket, f); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	out := []byte{}
+	for i:=0; i<200000; i++ {
+		out = append(out, fmt.Sprintf("%d\n", i)...)
+	}
+
+	expect_result := test_result{
+		compile: test_result_unit{
+		},
+		link: test_result_unit{
+		},
+		run: map[int]*test_result_unit{
+			0: &test_result_unit{
+				out: out,
+				result: &ExecutedResult {
+					Status: Passed,
+				},
+			},
+		},
+	}
+
+	//
+	assertTestResult(t, &result, &expect_result)
+}
+
+
+// ==================================================
+// ==================================================
+//
 func assertTestResult(t *testing.T, result, expect *test_result) {
 	assertUnit := func (tag string, result, expect *test_result_unit) {
-		if expect.out != result.out {
-			t.Fatalf("[%s / out] Expect(%s) but returned(%s)", tag, expect.out, result.out)
+		if expect.result != nil {
+			if result.result == nil {
+				t.Fatalf("[ERROR  : %s / result] result is nil", tag)
+			}
+			if expect.result.Status != result.result.Status {
+				t.Fatalf("ERROR  : [%s / result.Status] Expect(%s) but returned(%s)", tag,
+					expect.result.Status,
+					result.result.Status,
+				)
+			}
+
+		} else {
+			t.Logf("[SKIPPED: %s / result]", tag)
 		}
 
-		if expect.err != result.err {
-			t.Fatalf("[%s / err] Expect(%s) but returned(%s)", tag, expect.err, result.err)
+		if expect.out != nil {
+			if result.out == nil {
+				t.Fatalf("[ERROR  : %s / out] result is nil", tag)
+			}
+			if !bytes.Equal(expect.out, result.out) {
+				t.Fatalf("[ERROR  : %s / out] Expect(%s) but returned(%s)", tag, expect.out, result.out)
+			}
+
+		} else {
+			t.Logf("[SKIPPED: %s / out]", tag)
+		}
+
+		if expect.err != nil {
+			if result.out == nil {
+				t.Fatalf("[ERROR  : %s / err] result is nil", tag)
+			}
+			if !bytes.Equal(expect.err, result.err) {
+				t.Fatalf("[ERROR  : %s / err] Expect(%s) but returned(%s)", tag, expect.err, result.err)
+			}
+
+		} else {
+			t.Logf("[SKIPPED: %s / err]", tag)
 		}
 	}
 
 	assertUnit("compile", &result.compile, &expect.compile)
-	assertUnit("link", &result.link, &expect.link)
+	assertUnit("link   ", &result.link, &expect.link)
 
 	checked := make(map[int]bool)
 	for key, result_unit := range result.run {
@@ -444,7 +668,7 @@ func assertTestResult(t *testing.T, result, expect *test_result) {
 }
 
 type test_result_unit struct {
-	out, err	string
+	out, err	[]byte
 	result		*ExecutedResult
 }
 type test_result struct {
@@ -452,7 +676,7 @@ type test_result struct {
 	run				map[int]*test_result_unit
 }
 
-func makehelperCallback(result *test_result) func(v interface{}) {
+func makeHelperCallback(result *test_result) func(v interface{}) {
 	return func(v interface{}) {
 		switch v.(type) {
 		case *StreamExecutedResult:
@@ -473,26 +697,26 @@ func makehelperCallback(result *test_result) func(v interface{}) {
 			case CompileMode:
 				switch r.Output.Fd {
 				case StdoutFd:
-					result.compile.out = result.compile.out + string(r.Output.Buffer)
+					result.compile.out = append(result.compile.out, r.Output.Buffer...)
 				case StderrFd:
-					result.compile.err = result.compile.err + string(r.Output.Buffer)
+					result.compile.err = append(result.compile.err, r.Output.Buffer...)
 				}
 
 			case LinkMode:
 				switch r.Output.Fd {
 				case StdoutFd:
-					result.link.out = result.link.out + string(r.Output.Buffer)
+					result.link.out = append(result.link.out, r.Output.Buffer...)
 				case StderrFd:
-					result.link.err = result.link.err + string(r.Output.Buffer)
+					result.link.err = append(result.link.err, r.Output.Buffer...)
 				}
 
 			case RunMode:
 				if result.run[r.Index] == nil { result.run[r.Index] = &test_result_unit{} }
 				switch r.Output.Fd {
 				case StdoutFd:
-					result.run[r.Index].out = result.run[r.Index].out + string(r.Output.Buffer)
+					result.run[r.Index].out = append(result.run[r.Index].out, r.Output.Buffer...)
 				case StderrFd:
-					result.run[r.Index].err = result.run[r.Index].err + string(r.Output.Buffer)
+					result.run[r.Index].err = append(result.run[r.Index].err, r.Output.Buffer...)
 				}
 			}
 

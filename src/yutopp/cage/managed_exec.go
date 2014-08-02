@@ -66,11 +66,13 @@ func managedExec(
 		// parent process
 
 		//
-		syscall.Close(error_pipe.WriteFd)
+		defer func() {
+			syscall.Close(p.Stdout.WriteFd)
+			syscall.Close(p.Stderr.WriteFd)
+		}()
 
 		//
-		syscall.Close(p.Stdout.WriteFd)
-		syscall.Close(p.Stderr.WriteFd)
+		syscall.Close(error_pipe.WriteFd)
 
 		//
 		process, err := os.FindProcess(pid)
@@ -134,7 +136,7 @@ func managedExec(
 					}
 				}()
 
-				// cPU time
+				// CPU time
 				user_time := usage.Utime
 				system_time := usage.Stime
 
@@ -252,14 +254,14 @@ func managedExecChild(
 	}
 
 	// redirect stdout
-	if err := syscall.Close(p.Stdout.ReadFd); err != nil { panic(err) }
+	if err := p.Stdout.CloseRead(); err != nil { panic(err) }
 	if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
-	if err := syscall.Close(p.Stdout.WriteFd); err != nil { panic(err) }
+	if err := p.Stdout.CloseWrite(); err != nil { panic(err) }
 
 	// redirect stderr
-	if err := syscall.Close(p.Stderr.ReadFd); err != nil { panic(err) }
+	if err := p.Stderr.CloseRead(); err != nil { panic(err) }
 	if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
-	if err := syscall.Close(p.Stderr.WriteFd); err != nil { panic(err) }
+	if err := p.Stderr.CloseWrite(); err != nil { panic(err) }
 
 	// set PATH env
 	if path, ok := envs["PATH"]; ok {
@@ -272,7 +274,7 @@ func managedExecChild(
 	if len(args) < 1 {
 		panic(errors.New("args must contain at least one element"))
 	}
-	command := args[0]	//
+	command := args[0]	// args[0] is program name
 	exec_path, err := exec.LookPath(command)
 	if err != nil {
 		panic(err)

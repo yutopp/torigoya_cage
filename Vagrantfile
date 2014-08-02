@@ -13,7 +13,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box = "ubuntu/trusty64"
 
   # port 12321 is used by torigoya cage server
-  config.vm.network "forwarded_port", guest: 12321, host: 12321, auto_correct: true
+  config.vm.network "forwarded_port", guest: 23432, host: 23432, auto_correct: true
 
   config.vm.provider :virtualbox do |vb|
     vb.customize ["modifyvm", :id, "--memory", 1024]
@@ -28,6 +28,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.provision :shell, :inline => ["cp /vagrant/files/torigoya-packages.list /etc/apt/sources.list.d/.",
                                           "sudo apt-get -y update",
                                           "sudo apt-get -y upgrade",
-                                          "sudo apt-get -y install golang build-essential git",
+                                          "sudo apt-get -y install golang build-essential git unzip",
                                          ].join("; ")
 end

@@ -189,7 +189,7 @@ func (bm *BridgeMessage) run() (*ExecutedResult, error) {
 	res_limit := &ResourceLimit{
 		CPU: exec_setting.CpuTimeLimit,		// CPU limit(sec)
 		AS: exec_setting.MemoryBytesLimit,	// Memory limit(bytes)
-		FSize: 512 * 1024,					// Process can writes a file only 512KiB
+		FSize: 512 * 1024,				// Process can writes a file only 512KiB
 	}
 
 	//

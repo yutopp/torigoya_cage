@@ -12,6 +12,7 @@ package torigoya
 
 import(
 	"syscall"
+	"errors"
 )
 
 
@@ -29,6 +30,17 @@ func makePipeCloseOnExec() (*Pipe, error) {
 	return makePipeWithFlags(syscall.O_CLOEXEC)
 }
 
+func makePipeNonBlocking() (*Pipe, error) {
+	p, err := makePipe()
+	if err != nil { return p, err }
+
+	if _, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(p.ReadFd), syscall.F_SETFL, syscall.O_NONBLOCK); errno != 0 {
+		return p, errors.New("")
+	}
+
+	return p, nil
+}
+
 func makePipeWithFlags(flags int) (*Pipe, error) {
 	pipe := make([]int, 2)
 	if err := syscall.Pipe2(pipe, flags); err != nil {
@@ -42,21 +54,23 @@ func (p *Pipe) CopyForClone() *Pipe {
 	return &Pipe{p.ReadFd, p.WriteFd, false, false}
 }
 
-func (p *Pipe) Close() {
-	p.CloseRead()
-	p.CloseWrite()
+func (p *Pipe) Close() error {
+	if err := p.CloseRead(); err != nil { return err }
+	return p.CloseWrite()
 }
 
-func (p *Pipe) CloseRead() {
+func (p *Pipe) CloseRead() error {
 	if !p.readClosed {
-		syscall.Close(p.ReadFd)
+		if err := syscall.Close(p.ReadFd); err != nil { return err }
 		p.readClosed = true
 	}
+	return nil
 }
 
-func (p *Pipe) CloseWrite() {
+func (p *Pipe) CloseWrite() error {
 	if !p.writeClosed {
-		syscall.Close(p.WriteFd)
+		if err := syscall.Close(p.WriteFd); err != nil { return err }
 		p.writeClosed = true
 	}
+	return nil
 }
