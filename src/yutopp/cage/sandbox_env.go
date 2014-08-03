@@ -209,6 +209,12 @@ func buildChrootEnv(
 }
 
 func makeNode(nodename string, dev int, perm os.FileMode) error {
+	if fileExists(nodename) {
+		if err := os.Remove(nodename); err != nil {
+			return err
+		}
+	}
+
 	if err := syscall.Mknod(nodename, syscall.S_IFCHR, dev); err != nil {
 		return errors.New(fmt.Sprintf("failed to mknod %s (%s)", nodename, err.Error()))
 	}
