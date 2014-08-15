@@ -120,7 +120,7 @@ func (ctx *Context) UpdatePackages() error {
 	if err != nil {
 		fmt.Printf("error:: %s\n", err.Error())
 	} else {
-		fmt.Printf("passed:: %s\n", out)
+		fmt.Printf("package update passed:: %s\n", out)
 	}
 	fmt.Printf("==================================================\n")
 

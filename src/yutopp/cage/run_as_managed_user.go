@@ -75,12 +75,13 @@ func cleanupManagedUser(user_name string) error {
 		if err := DeleteUser(user_name); err != nil {
 			log.Printf("Failed to delete user %s / %d times", user_name, i)
 			killUserProcess(user_name, []string{"HUP", "KILL"})
+
 		} else {
 			succeeded = true
 			break
 		}
 
-		time.Sleep(100 * time.Millisecond)
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	if !succeeded {

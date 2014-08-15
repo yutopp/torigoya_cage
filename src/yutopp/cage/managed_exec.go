@@ -52,6 +52,8 @@ func managedExec(
 	if err != nil { return nil, err }
 	defer error_pipe.Close()
 
+	fmt.Printf("managedExec start\n")
+
 	// fork process!
 	pid, err := fork()
 	if err != nil {
@@ -97,7 +99,7 @@ func managedExec(
 			if !ok {
 				return nil, errors.New("failed to cast to *syscall.Rusage")
 			}
-			fmt.Printf("%v\n", usage)
+			fmt.Printf("Usage %v\n", usage)
 
 			// error check sequence
 			error_buf := make([]byte, 128)
@@ -221,9 +223,9 @@ func managedExecChild(
 	fmt.Printf("==bash -c \"ps -ef | wc -l\" =====================\n")
 	out, err := exec.Command("/bin/bash", "-c", "ps -ef | wc -l").Output()
 	if err != nil {
-		fmt.Printf("error:: %s\n", err.Error())
+		fmt.Printf("cmd error:: %s\n", err.Error())
 	} else {
-		fmt.Printf("passed:: %s\n", out)
+		fmt.Printf("cmd passed:: %s\n", out)
 	}
 
 
@@ -251,15 +253,7 @@ func managedExecChild(
 		if err := syscall.Dup2(int(file.Fd()), 0); err != nil { panic(err) }
 	}
 
-	// redirect stdout
-	if err := p.Stdout.CloseRead(); err != nil { panic(err) }
-	if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
-	if err := p.Stdout.CloseWrite(); err != nil { panic(err) }
 
-	// redirect stderr
-	if err := p.Stderr.CloseRead(); err != nil { panic(err) }
-	if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
-	if err := p.Stderr.CloseWrite(); err != nil { panic(err) }
 
 	// set PATH env
 	if path, ok := envs["PATH"]; ok {
@@ -283,6 +277,18 @@ func managedExecChild(
 	for k, v := range envs {
 		env_list = append(env_list, k + "=" + v)
 	}
+
+	fmt.Printf("managed exec :: syscall.Exec!\n")
+
+	// redirect stdout
+	if err := p.Stdout.CloseRead(); err != nil { panic(err) }
+	if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
+	if err := p.Stdout.CloseWrite(); err != nil { panic(err) }
+
+	// redirect stderr
+	if err := p.Stderr.CloseRead(); err != nil { panic(err) }
+	if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
+	if err := p.Stderr.CloseWrite(); err != nil { panic(err) }
 
 	// exec!!
 	err = syscall.Exec(exec_path, args, env_list);
