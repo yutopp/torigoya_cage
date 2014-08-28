@@ -22,34 +22,6 @@ type Pipe struct {
 	readClosed, writeClosed		bool
 }
 
-func makePipe() (*Pipe, error) {
-	return makePipeWithFlags(0)
-}
-
-func makePipeCloseOnExec() (*Pipe, error) {
-	return makePipeWithFlags(syscall.O_CLOEXEC)
-}
-
-func makePipeNonBlocking() (*Pipe, error) {
-	p, err := makePipe()
-	if err != nil { return p, err }
-
-	if _, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(p.ReadFd), syscall.F_SETFL, syscall.O_NONBLOCK); errno != 0 {
-		return p, errors.New("")
-	}
-
-	return p, nil
-}
-
-func makePipeWithFlags(flags int) (*Pipe, error) {
-	pipe := make([]int, 2)
-	if err := syscall.Pipe2(pipe, flags); err != nil {
-		return nil, err
-	}
-
-	return &Pipe{pipe[0], pipe[1], false, false}, nil
-}
-
 func (p *Pipe) CopyForClone() *Pipe {
 	return &Pipe{p.ReadFd, p.WriteFd, false, false}
 }
@@ -73,4 +45,55 @@ func (p *Pipe) CloseWrite() error {
 		p.writeClosed = true
 	}
 	return nil
+}
+
+func (p *Pipe) Dup() (*Pipe, error) {
+	new_readfd, err := syscall.Dup(p.ReadFd)
+	if err != nil { return nil, err }
+
+	new_writefd, err := syscall.Dup(p.WriteFd)
+	if err != nil { return nil, err }
+
+	return &Pipe{new_readfd, new_writefd, false, false}, nil
+}
+
+// ================================================================================
+
+func makePipe() (*Pipe, error) {
+	return makePipeWithFlags(0)
+}
+
+func makePipeCloseOnExec() (*Pipe, error) {
+	return makePipeWithFlags(syscall.O_CLOEXEC)
+}
+
+func makePipeNonBlocking() (*Pipe, error) {
+	p, err := makePipe()
+	if err != nil { return p, err }
+
+	if _, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(p.ReadFd), syscall.F_SETFL, syscall.O_NONBLOCK); errno != 0 {
+		return p, errors.New("")
+	}
+
+	return p, nil
+}
+
+func makePipeNonBlockingWithFlags(flags int) (*Pipe, error) {
+	p, err := makePipeWithFlags(flags)
+	if err != nil { return p, err }
+
+	if _, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(p.ReadFd), syscall.F_SETFL, syscall.O_NONBLOCK); errno != 0 {
+		return p, errors.New("")
+	}
+
+	return p, nil
+}
+
+func makePipeWithFlags(flags int) (*Pipe, error) {
+	pipe := make([]int, 2)
+	if err := syscall.Pipe2(pipe, flags); err != nil {
+		return nil, err
+	}
+
+	return &Pipe{pipe[0], pipe[1], false, false}, nil
 }

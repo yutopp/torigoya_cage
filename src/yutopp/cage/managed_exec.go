@@ -191,7 +191,7 @@ func managedExec(
 func managedExecChild(
 	rl					*ResourceLimit,
 	p					*BridgePipes,
-	error_pipe			Pipe,
+	error_pipe			Pipe/*close on exec*/,
 	args				[]string,
 	envs				map[string]string,
 	umask				int,
@@ -219,16 +219,6 @@ func managedExecChild(
 	log.Printf("== Managed: memory(byte)    (%v)\n", rl.AS)
 	log.Printf("== Managed: fsize           (%v)\n", rl.FSize)
 
-
-	fmt.Printf("==bash -c \"ps -ef | wc -l\" =====================\n")
-	out, err := exec.Command("/bin/bash", "-c", "ls -la /proc/self/fd").Output()
-	if err != nil {
-		fmt.Printf("cmd error:: %s\n", err.Error())
-	} else {
-		fmt.Printf("cmd passed:: %s\n", out)
-	}
-
-
 	//
  	setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
  	setLimit(C.RLIMIT_NOFILE, 512)		// Process can open 512 files
@@ -241,19 +231,6 @@ func managedExecChild(
 
 	//
 	syscall.Umask(umask)
-
-	// redirect stdin
-	if stdin_file_path != nil {
-		fmt.Printf("============= stdin (%v)\n", *stdin_file_path)
-		file, err := os.Open(*stdin_file_path)	// read
-		if err != nil { panic(err) }
-		defer file.Close()
-
-		//
-		if err := syscall.Dup2(int(file.Fd()), 0); err != nil { panic(err) }
-	}
-
-
 
 	// set PATH env
 	if path, ok := envs["PATH"]; ok {
@@ -280,6 +257,20 @@ func managedExecChild(
 
 	fmt.Printf("managed exec :: syscall.Exec!\n")
 
+	// close unused pipe
+	if err := p.Result.Close(); err != nil { panic(err) }
+
+	// redirect stdin
+	if stdin_file_path != nil {
+		fmt.Printf("============= stdin (%v)\n", *stdin_file_path)
+		file, err := os.Open(*stdin_file_path)	// read
+		if err != nil { panic(err) }
+		defer file.Close()
+
+		//
+		if err := syscall.Dup2(int(file.Fd()), 0); err != nil { panic(err) }
+	}
+
 	// redirect stdout
 	if err := p.Stdout.CloseRead(); err != nil { panic(err) }
 	if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
@@ -290,6 +281,7 @@ func managedExecChild(
 	if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
 	if err := p.Stderr.CloseWrite(); err != nil { panic(err) }
 
+	// ==========
 	// exec!!
 	err = syscall.Exec(exec_path, args, env_list);
 

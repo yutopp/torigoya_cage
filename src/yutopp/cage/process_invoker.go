@@ -44,7 +44,7 @@ func (bm *BridgeMessage) invokeProcessCloner(
 }
 
 
-func invokeProcessClonerBaseClient(
+func invokeProcessClonerBaseChild(
 	cloner_dir		string,
 	cloner_name		string,
 	bm				*BridgeMessage,
@@ -52,6 +52,23 @@ func invokeProcessClonerBaseClient(
 ) (*ExecutedResult, error) {
 	cloner_path := filepath.Join(cloner_dir, cloner_name)
 	log.Printf("Cloner path: %s", cloner_path)
+
+	//
+	new_stdout, err := bm.Pipes.Stdout.Dup()
+	if err != nil { return nil, err }
+
+	new_stderr, err := bm.Pipes.Stderr.Dup()
+	if err != nil { return nil, err }
+
+	new_result, err := bm.Pipes.Result.Dup()
+	if err != nil { return nil, err }
+
+	//
+	bm.Pipes = &BridgePipes{
+		Stdout: new_stdout,
+		Stderr: new_stderr,
+		Result: new_result,
+	}
 
 	callback_path := filepath.Join(cloner_dir, "cage.callback")
 
@@ -87,15 +104,15 @@ func invokeProcessClonerBase(
 	output_stream	chan<-StreamOutput,
 ) (*ExecutedResult, error) {
 	// pipe for
-	stdout_pipe, err := makePipeNonBlocking()
+	stdout_pipe, err := makePipeNonBlockingWithFlags(syscall.O_CLOEXEC)
 	if err != nil { return nil, err }
 	defer stdout_pipe.Close()
 
-	stderr_pipe, err := makePipeNonBlocking()
+	stderr_pipe, err := makePipeNonBlockingWithFlags(syscall.O_CLOEXEC)
 	if err != nil { return nil, err }
 	defer stderr_pipe.Close()
 
-	result_pipe, err := makePipe()
+	result_pipe, err := makePipeWithFlags(syscall.O_CLOEXEC)
 	if err != nil { return nil, err }
 	defer result_pipe.Close()
 
@@ -105,9 +122,9 @@ func invokeProcessClonerBase(
 	}
 	// update pipe data to message
 	bm.Pipes = &BridgePipes{
-		Stdout: stdout_pipe.CopyForClone(),
-		Stderr: stderr_pipe.CopyForClone(),
-		Result: result_pipe.CopyForClone(),
+		Stdout: stdout_pipe,
+		Stderr: stderr_pipe,
+		Result: result_pipe,
 	}
 
 	// fork process!
@@ -117,7 +134,7 @@ func invokeProcessClonerBase(
 	}
 	if pid == 0 {
 		// child process
-		invokeProcessClonerBaseClient(cloner_dir, cloner_name, bm, output_stream)
+		invokeProcessClonerBaseChild(cloner_dir, cloner_name, bm, output_stream)
 
 		// unreachable
 		os.Exit(-1);
