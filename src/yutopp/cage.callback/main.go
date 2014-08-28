@@ -30,13 +30,6 @@ func main() {
 	}
 	defer bm.Pipes.Close()
 
-	// !!! ===================
-	// Drop privilege
-	// !!! ===================
-	if err := bm.IntoJail(); err != nil {
-		panic(err)
-	}
-
 	// execute given commands!
 	if err := bm.Exec(); err != nil {
 		panic(err)

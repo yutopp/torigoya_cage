@@ -39,9 +39,8 @@ var errorSequence = []byte{ 0x0d, 0x0e, 0x0a, 0x0d }
 
 
 //
-func managedExec(
+func (bm *BridgeMessage) managedExec(
 	rl					*ResourceLimit,
-	p					*BridgePipes,
 	args				[]string,
 	envs				map[string]string,
 	umask				int,
@@ -63,7 +62,7 @@ func managedExec(
 		// !! call child process !!
 		log.Printf(">> managedExec || child\n")
 
-		managedExecChild(rl, p, *error_pipe, args, envs, umask, stdin_file_path)
+		bm.managedExecChild(rl, *error_pipe, args, envs, umask, stdin_file_path)
 		return nil, nil
 
 	} else {
@@ -72,8 +71,8 @@ func managedExec(
 
 		//
 		defer func() {
-			syscall.Close(p.Stdout.WriteFd)
-			syscall.Close(p.Stderr.WriteFd)
+			syscall.Close(bm.Pipes.Stdout.WriteFd)
+			syscall.Close(bm.Pipes.Stderr.WriteFd)
 		}()
 
 		//
@@ -191,9 +190,8 @@ func managedExec(
 }
 
 
-func managedExecChild(
+func (bm *BridgeMessage) managedExecChild(
 	rl					*ResourceLimit,
-	p					*BridgePipes,
 	error_pipe			Pipe/*close on exec*/,
 	args				[]string,
 	envs				map[string]string,
@@ -215,6 +213,17 @@ func managedExecChild(
 		// exit
 		os.Exit(-1)
 	}()
+
+
+	// !!! ===================
+	// Drop privilege
+	// !! IMPORTANT !!
+	// !!! ===================
+	if err := bm.IntoJail(); err != nil {
+		panic(err)
+	}
+	// !!! ===================
+
 
 	log.Printf("== Managed: child           (%v)\n", args)
 	log.Printf("== Managed: envs            (%v)\n", envs)
@@ -261,7 +270,7 @@ func managedExecChild(
 	log.Printf("managed exec :: syscall.Exec!\n")
 
 	// close unused pipe
-	if err := p.Result.Close(); err != nil { panic(err) }
+	if err := bm.Pipes.Result.Close(); err != nil { panic(err) }
 
 
 	log.Printf("==================================================\n")
@@ -285,14 +294,14 @@ func managedExecChild(
 	}
 
 	// redirect stdout
-	if err := p.Stdout.CloseRead(); err != nil { panic(err) }
-	if err := syscall.Dup2(p.Stdout.WriteFd, 1); err != nil { panic(err) }
-	if err := p.Stdout.CloseWrite(); err != nil { panic(err) }
+	if err := bm.Pipes.Stdout.CloseRead(); err != nil { panic(err) }
+	if err := syscall.Dup2(bm.Pipes.Stdout.WriteFd, 1); err != nil { panic(err) }
+	if err := bm.Pipes.Stdout.CloseWrite(); err != nil { panic(err) }
 
 	// redirect stderr
-	if err := p.Stderr.CloseRead(); err != nil { panic(err) }
-	if err := syscall.Dup2(p.Stderr.WriteFd, 2); err != nil { panic(err) }
-	if err := p.Stderr.CloseWrite(); err != nil { panic(err) }
+	if err := bm.Pipes.Stderr.CloseRead(); err != nil { panic(err) }
+	if err := syscall.Dup2(bm.Pipes.Stderr.WriteFd, 2); err != nil { panic(err) }
+	if err := bm.Pipes.Stderr.CloseWrite(); err != nil { panic(err) }
 
 	// ==========
 	// exec!!

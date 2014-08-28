@@ -128,7 +128,7 @@ func (bm *BridgeMessage) compile() (*ExecutedResult, error) {
 	umask := 0077	// rwx --- ---
 
 	// execute!
-	return managedExec(res_limit, bm.Pipes, args, env, umask, stdin_file_path)
+	return bm.managedExec(res_limit, args, env, umask, stdin_file_path)
 }
 
 
@@ -163,7 +163,7 @@ func (bm *BridgeMessage) link() (*ExecutedResult, error) {
 	umask := 0077	// rwx --- ---
 
 	// execute!
-	return managedExec(res_limit, bm.Pipes, args, env, umask, stdin_file_path)
+	return bm.managedExec(res_limit, args, env, umask, stdin_file_path)
 }
 
 
@@ -197,5 +197,5 @@ func (bm *BridgeMessage) run() (*ExecutedResult, error) {
 	umask := 0277	// r-x --- ---
 
 	// execute!
-	return managedExec(res_limit, bm.Pipes, args, env, umask, stdin_file_path)
+	return bm.managedExec(res_limit, args, env, umask, stdin_file_path)
 }
