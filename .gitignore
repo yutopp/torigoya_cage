@@ -5,3 +5,9 @@ pkg/
 
 torigoya_factory
 torigoya_proc_profiles
+
+cage.test
+cpu.pprof
+cpu.txt
+mem.pprof
+mem.txt
