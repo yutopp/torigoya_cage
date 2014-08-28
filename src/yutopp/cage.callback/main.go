@@ -15,7 +15,7 @@ import (
 )
 
 func main() {
-	println("cage.callback booted")
+	println("======== cage.callback booted")
 
 	packed_torigoya_content := os.Getenv("packed_torigoya_content")
 
@@ -41,4 +41,6 @@ func main() {
 	if err := bm.Exec(); err != nil {
 		panic(err)
 	}
+
+	println("======== cage.callback finished")
 }

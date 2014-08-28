@@ -52,7 +52,7 @@ func managedExec(
 	if err != nil { return nil, err }
 	defer error_pipe.Close()
 
-	fmt.Printf("managedExec start\n")
+	log.Printf(">> managedExec start\n")
 
 	// fork process!
 	pid, err := fork()
@@ -61,11 +61,14 @@ func managedExec(
 	}
 	if pid == 0 {
 		// !! call child process !!
+		log.Printf(">> managedExec || child\n")
+
 		managedExecChild(rl, p, *error_pipe, args, envs, umask, stdin_file_path)
 		return nil, nil
 
 	} else {
 		// parent process
+		log.Printf(">> managedExec || parent\n")
 
 		//
 		defer func() {
