@@ -49,6 +49,7 @@ func main() {
 	//
 	config_path := flag.String("config_path", "config.yml", "path to config.yml")
 	mode := flag.String("mode", "release", "select mode from config")
+	update := flag.Bool("update", false, "do update")
 	flag.Parse()
 
 	//
@@ -119,6 +120,22 @@ func main() {
 			log.Panicf("unexpected: assertion failed...")
 		}
 		log.Printf("Finished to download/reload proc_table...\n")
+	}
+
+	if *update {
+		log.Printf("Update environment...\n")
+
+		log.Printf("(1/3) Update packages...\n")
+		if err := ctx.UpdatePackages(); err != nil {
+			log.Panicf(err.Error())
+		}
+
+		log.Printf("(2/3) Update tables...\n")
+		if err := ctx.UpdateProcTable(); err != nil {
+			log.Panicf(err.Error())
+		}
+
+		log.Printf("(3/3) Complete!\n")
 	}
 
 	//

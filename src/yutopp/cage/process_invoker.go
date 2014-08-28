@@ -199,7 +199,14 @@ func invokeProcessClonerBase(
 			result_pipe.CloseWrite()
 			result_buf, _ := readPipe(result_pipe.ReadFd)
 			result, err := DecodeExecuteResult(result_buf)
-			log.Printf("??RESULT!!!!!!! %v / %v", result, err)
+			log.Printf("??RESULT!!!!!!! : err => %v", err)
+			log.Printf("  => sec          : %v", result.UsedCPUTimeSec)
+			log.Printf("  => mem          : %v", result.UsedMemoryBytes)
+			log.Printf("  => signal       : %v", result.Signal)
+			log.Printf("  => return code  : %v", result.ReturnCode)
+			log.Printf("  => command      : %v", result.CommandLine)
+			log.Printf("  => status       : %v", result.Status)
+			log.Printf("  => system error : %v", result.SystemErrorMessage)
 
 			return result, err
 

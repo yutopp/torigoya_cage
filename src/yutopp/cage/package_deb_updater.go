@@ -15,6 +15,7 @@ import(
 	"strings"
 	"regexp"
 	"errors"
+	"os"
 	"os/exec"
 	"log"
 )
@@ -62,10 +63,18 @@ func (u *DebPackageUpdater) Update() error {
 	}
 
 	log.Printf("DebPackageUpdater info: try to install: %v\n", formatted_packages)
-	if out, err := exec.Command("sudo", append([]string{"apt-get", "install", "-y", "--force-yes"}, formatted_packages...)...).CombinedOutput(); err != nil {
-		m := fmt.Sprintf("DebPackageUpdater error: on installing [%s]\n", out)
-		log.Print(m)
-		return errors.New(m)
+	for i, p := range formatted_packages {
+		log.Printf("(%d/%d) %s\n", i+1, len(formatted_packages), p)
+
+		cmd := exec.Command("sudo", "apt-get", "install", "-y", "--force-yes", p)
+		cmd.Stdout = os.Stdout
+		cmd.Stderr = os.Stderr
+
+		if err := cmd.Run(); err != nil {
+			m := fmt.Sprintf("DebPackageUpdater error: on installing [%s]\n", p)
+			log.Print(m)
+			return errors.New(m)
+		}
 	}
 
 	log.Printf("DebPackageUpdater info: try to upgrade: %v\n", formatted_packages)
