@@ -15,7 +15,6 @@ import(
 	"time"
 	"errors"
 	"os"
-	"os/exec"
 	"syscall"
 	"path/filepath"
 )
@@ -44,8 +43,8 @@ func (bm *BridgeMessage) invokeProcessCloner(
 	return invokeProcessClonerBase(cloner_dir, "process_cloner", bm, output_stream)
 }
 
-//
-func invokeProcessClonerBase(
+
+func invokeProcessClonerBaseClient(
 	cloner_dir		string,
 	cloner_name		string,
 	bm				*BridgeMessage,
@@ -56,17 +55,41 @@ func invokeProcessClonerBase(
 
 	callback_path := filepath.Join(cloner_dir, "cage.callback")
 
-	// init default value
-	if bm == nil {
-		bm = &BridgeMessage{}
+	//
+	content_string, err := bm.Encode()
+	if err != nil { return nil, err }
+
+	//
+	envs := []string{
+		"callback_executable=" + callback_path,
+		"packed_torigoya_content=" + content_string,
 	}
 
-	// TODO: close on exec
+	//
+	args := []string{
+		cloner_name,
+	}
+
+	// exec!!
+	err = syscall.Exec(callback_path, args, envs);
+	if err != nil {
+		log.Printf("Error!!! %v", err)
+	}
+
+	return nil, nil
+}
+
+//
+func invokeProcessClonerBase(
+	cloner_dir		string,
+	cloner_name		string,
+	bm				*BridgeMessage,
+	output_stream	chan<-StreamOutput,
+) (*ExecutedResult, error) {
 	// pipe for
 	stdout_pipe, err := makePipeNonBlocking()
 	if err != nil { return nil, err }
 	defer stdout_pipe.Close()
-
 
 	stderr_pipe, err := makePipeNonBlocking()
 	if err != nil { return nil, err }
@@ -76,6 +99,10 @@ func invokeProcessClonerBase(
 	if err != nil { return nil, err }
 	defer result_pipe.Close()
 
+	// init default value
+	if bm == nil {
+		bm = &BridgeMessage{}
+	}
 	// update pipe data to message
 	bm.Pipes = &BridgePipes{
 		Stdout: stdout_pipe.CopyForClone(),
@@ -83,96 +110,95 @@ func invokeProcessClonerBase(
 		Result: result_pipe.CopyForClone(),
 	}
 
-	//
-	content_string, err := bm.Encode()
-	if err != nil { return nil, err }
-
-	//
-	cmd := exec.Command(cloner_path)
-	cmd.Env = []string{
-		"callback_executable=" + callback_path,
-		"packed_torigoya_content=" + content_string,
+	// fork process!
+	pid, err := fork()
+	if err != nil {
+		return nil, err;
 	}
+	if pid == 0 {
+		// child process
+		invokeProcessClonerBaseClient(cloner_dir, cloner_name, bm, output_stream)
 
-	// debug...
-	cmd.Stdout = os.Stdout
-    cmd.Stderr = os.Stderr
+		// unreachable
+		os.Exit(-1);
+		return nil, nil
 
-	//cmd.Stdout = nil
-    //cmd.Stderr = nil
-
-
-	// Start Process
-	// TODO: rewrite forc/exec to attach close-on-exec to pipe...
-	if err := cmd.Start(); err != nil {
-		log.Fatal(err)
-		return nil, err
-	}
-
-	//
-	stdout_pipe.CloseWrite()
-	stderr_pipe.CloseWrite()
-
-	// wait for exit process
-	process_wait_c := make(chan error)
-	go func() {
-		process_wait_c <- cmd.Wait()
-	}()
-
-	// read stdout/stderr
-	force_close_out := make(chan bool)
-	stdout_err := make(chan error)
-	go readPipeAsync(stdout_pipe.ReadFd, stdout_err, StdoutFd, force_close_out, output_stream)
-	force_close_err := make(chan bool)
-	stderr_err := make(chan error)
-	go readPipeAsync(stderr_pipe.ReadFd, stderr_err, StderrFd, force_close_err, output_stream)
-
-	//
-	defer func() {
-		close(process_wait_c)
-
-		force_close_out <- true
-		force_close_err <- true
-
-		// block
-		if err := <-stdout_err; err != nil {
-			log.Printf("??STDOUT ERROR: %v\n", err)
-		}
-		close(force_close_out)
-
-		if err := <-stderr_err; err != nil {
-			log.Printf("??STDERR ERROR: %v\n", err)
-		}
-		close(force_close_err)
-	}()
-
-	// wait for finishing subprocess
-	select {
-	case err := <-process_wait_c:
-		// subprocess has been finished
-		log.Printf("!! CHILD PROCESS IS FINISHED %v", err)
+	} else {
+		// parent process
+		process, err := os.FindProcess(pid)
 		if err != nil {
 			return nil, err
 		}
 
-		if !cmd.ProcessState.Success() {
-			return nil, errors.New("Process finished with failed state")
-		}
+		//
+		stdout_pipe.CloseWrite()
+		stderr_pipe.CloseWrite()
+
+		// parent process
+		wait_pid_chan := make(chan *os.ProcessState)
+		go func() {
+			ps, _ := process.Wait()
+			wait_pid_chan <- ps
+		}()
+
+		// read stdout/stderr
+		force_close_out := make(chan bool)
+		stdout_err := make(chan error)
+		go readPipeAsync(stdout_pipe.ReadFd, stdout_err, StdoutFd, force_close_out, output_stream)
+		force_close_err := make(chan bool)
+		stderr_err := make(chan error)
+		go readPipeAsync(stderr_pipe.ReadFd, stderr_err, StderrFd, force_close_err, output_stream)
 
 		//
-		result_pipe.CloseWrite()
-		result_buf, _ := readPipe(result_pipe.ReadFd)
-		result, err := DecodeExecuteResult(result_buf)
-		log.Printf("??RESULT!!!!!!! %v / %v", result, err)
+		defer func() {
+			close(wait_pid_chan)
 
-		return result, err
+			force_close_out <- true
+			force_close_err <- true
 
-	case <-time.After(500 * time.Second):
-		// TODO: fix
-		// will blocking( wait for response at least 500 seconds )
-		log.Println("TIMEOUT")
-		return nil, errors.New("Process timeouted")
-	}
+			// block
+			if err := <-stdout_err; err != nil {
+				log.Printf("??STDOUT ERROR: %v\n", err)
+			}
+			close(force_close_out)
+
+			if err := <-stderr_err; err != nil {
+				log.Printf("??STDERR ERROR: %v\n", err)
+			}
+			close(force_close_err)
+		}()
+
+		// wait for finishing subprocess
+		select {
+		case ps := <-wait_pid_chan:
+			// subprocess has been finished
+			log.Printf("!! CHILD PROCESS IS FINISHED %v", ps)
+
+			if !ps.Success() {
+				return nil, errors.New("Process finished with failed state")
+			}
+
+			//
+			result_pipe.CloseWrite()
+			result_buf, _ := readPipe(result_pipe.ReadFd)
+			result, err := DecodeExecuteResult(result_buf)
+			log.Printf("??RESULT!!!!!!! %v / %v", result, err)
+
+			return result, err
+
+		case <-time.After(500 * time.Second):
+			// TODO: fix
+			// will blocking( wait for response at least 500 seconds )
+			log.Println("TIMEOUT")
+			return nil, errors.New("Process timeouted")
+		}
+	} // if pid
+
+
+
+
+
+
 }
 
 func readPipeAsync(

@@ -92,7 +92,7 @@ func managedExec(
 		//
 		select {
 		case ps := <-wait_pid_chan:
-			// toke status
+			// take status
 
 			//
 			usage, ok := ps.SysUsage().(*syscall.Rusage)
@@ -221,7 +221,7 @@ func managedExecChild(
 
 
 	fmt.Printf("==bash -c \"ps -ef | wc -l\" =====================\n")
-	out, err := exec.Command("/bin/bash", "-c", "ps -ef | wc -l").Output()
+	out, err := exec.Command("/bin/bash", "-c", "ls -la /proc/self/fd").Output()
 	if err != nil {
 		fmt.Printf("cmd error:: %s\n", err.Error())
 	} else {

@@ -111,7 +111,7 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 	//
 	if fileExists(user_dir_path) {
 		log.Printf("user directory %s is already existed, so remove them\n", user_dir_path)
-		if err := umountAll(user_dir_path); err != nil {
+		if err := umountJail(user_dir_path); err != nil {
 			return nil, errors.New(fmt.Sprintf("Couldn't unmount directory %s (%s)", user_dir_path, err))
 		}
 		if err := os.RemoveAll(user_dir_path); err != nil {
@@ -191,12 +191,12 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 		source_full_paths[index] = source_full_path
 	}
 
-	fmt.Printf("==================================================\n")
+	log.Printf("==================================================\n")
 	out, err := exec.Command("/bin/ls", "-laR", user_home_path).Output()
 	if err != nil {
-		fmt.Printf("error:: %s\n", err.Error())
+		log.Printf("error:: %s\n", err.Error())
 	} else {
-		fmt.Printf("passed:: %s\n", out)
+		log.Printf("passed:: %s\n", out)
 	}
 
 	return source_full_paths, err
@@ -218,7 +218,7 @@ func (ctx *Context) reassignTarget(
 
 	// In posix, Uid only contains numbers
 	host_user_id, _ := strconv.Atoi(ctx.hostUser.Uid)
-	fmt.Printf("host uid: %s\n", ctx.hostUser.Uid)
+	log.Printf("host uid: %s\n", ctx.hostUser.Uid)
 
 	if err := ctx.cleanupMountedFiles(base_name); err != nil {
 		return "", nil, err
@@ -277,12 +277,12 @@ func (ctx *Context) reassignTarget(
 		return err
 	})
 
-	fmt.Printf("==================================================\n")
+	log.Printf("==================================================\n")
 	out, err := exec.Command("/bin/ls", "-laR", user_home_path).Output()
 	if err != nil {
-		fmt.Printf("error:: %s\n", err.Error())
+		log.Printf("error:: %s\n", err.Error())
 	} else {
-		fmt.Printf("passed:: %s\n", out)
+		log.Printf("passed:: %s\n", out)
 	}
 
 	return user_dir_path, input_path, err
@@ -304,14 +304,15 @@ func (ctx *Context) cleanupMountedFiles(
 	dirs, err := filepath.Glob(filepath.Join(user_dir_path, "/*"))
 	if err != nil { return err }
 
+	if err := umountJail(user_dir_path); err != nil {
+		return errors.New(fmt.Sprintf("Couldn't unmount directory %s (%s)", user_dir_path, err))
+	}
+
 	for _, dir := range dirs {
 		rel_dir, err := filepath.Rel(user_dir_path, dir)
 		if err != nil { return err }
 
 		if rel_dir != ctx.homeDir {
-			if err := umountAll(dir); err != nil {
-				return errors.New(fmt.Sprintf("Couldn't unmount directory %s (%s)", user_dir_path, err))
-			}
 			if err := os.RemoveAll(dir); err != nil {
 				return errors.New(fmt.Sprintf("Couldn't remove directory %s (%s)", dir, err))
 			}
@@ -333,7 +334,7 @@ func (ctx *Context) createInput(
 
 	// In posix, Uid only contains numbers
 	host_user_id, _ := strconv.Atoi(ctx.hostUser.Uid)
-	fmt.Printf("host uid: %s\n", ctx.hostUser.Uid)
+	log.Printf("host uid: %s\n", ctx.hostUser.Uid)
 
 	//
 	const inputs_dir_name = "stdin"
@@ -399,35 +400,4 @@ func guardPath(file_path string, user_id int, group_id int, mode os.FileMode) er
 	}
 
 	return nil
-}
-
-
-func mountpoint(dir_name string) bool {
-	mountpoint_command := exec.Command("mountpoint", dir_name)
-	if err := mountpoint_command.Run(); err != nil {
-		fmt.Printf("= mount point >> %s\n", err.Error())
-		return false
-	}
-
-	return true
-}
-
-func umountAll(dir_name string) error {
-	err := filepath.Walk(dir_name, func(path string, info os.FileInfo, err error) error {
-		if err != nil { return err }
-		if info.IsDir() {
-			fmt.Printf("=>> %s\n", path)
-			if mountpoint(path) {
-				fmt.Printf("= TRY TO UNMOUNT >> %s\n", path)
-				umount_command := exec.Command("umount", "--force", path)
-				if err := umount_command.Run(); err != nil {
-					return errors.New("Failed to umount : " + err.Error())
-				}
-			}
-		}
-
-		return nil
-	})
-
-	return err
 }

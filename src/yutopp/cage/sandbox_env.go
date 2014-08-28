@@ -12,9 +12,11 @@ package torigoya
 
 import(
 	"os"
+	"os/exec"
 	"syscall"
 	"errors"
 	"fmt"
+	"path"
 	"log"
 )
 
@@ -65,6 +67,7 @@ func (bm *BridgeMessage) IntoJail() error {
 
 
 // mount system's
+// BE CAREFUL OF ORDER
 // http://linuxjm.sourceforge.jp/html/LDP_man-pages/man2/mount.2.html
 var readOnlyMounts = []string {
 	"/etc",
@@ -125,7 +128,6 @@ func buildChrootEnv(
 
 
 		// mount procfs
-
 		if err := os.MkdirAll("proc", 0555); err != nil {
 			return errors.New(fmt.Sprintf("failed to mkdir proc (%s)", err))
 		}
@@ -154,7 +156,7 @@ func buildChrootEnv(
 			return errors.New(fmt.Sprintf("failed to mount /tmp -> ./tmp (%s)", err))
 		}
 
-		// create /dev
+		// create /dev [NOT MOUNT]
 		if err := os.MkdirAll("dev", 0555); err != nil {
 			return errors.New(fmt.Sprintf("failed to mkdir dev (%s)", err))
 		}
@@ -221,5 +223,53 @@ func makeNode(nodename string, dev int, perm os.FileMode) error {
 	if err := os.Chmod(nodename, perm); err != nil {
 		return errors.New(fmt.Sprintf("failed to chmod %s (%v)", nodename, perm))
 	}
+	return nil
+}
+
+func umountJail(base_dir string) error {
+	// unmount system's
+	for i := len(readOnlyMounts)-1; i >= 0; i-- {
+		if err := umountJailedDir(base_dir, readOnlyMounts[i]); err != nil {
+			return err
+		}
+	}
+
+	//
+	if err := umountJailedDir(base_dir, "/tmp"); err != nil {
+		return err
+	}
+
+	//
+	if err := umountJailedDir(base_dir, "/proc"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func umountJailedDir(base_dir string, mount string) error {
+	// unmount system's
+	target_dir := path.Join(base_dir, mount)
+	if fileExists(target_dir) {
+		if err := umount(target_dir); err != nil {
+			return err
+		}
+
+	} else {
+		log.Printf("NOT unmounted: system dir %s is not existed on sandbox env\n", target_dir)
+	}
+
+	return nil
+}
+
+
+
+func umount(dir_name string) error {
+	log.Printf("= TRY TO UNMOUNT >> %s\n", dir_name)
+	umount_command := exec.Command("umount", "-l", dir_name)	// lazy umount
+	if err := umount_command.Run(); err != nil {
+		return errors.New("Failed to umount: " + dir_name + " | err: " + err.Error())
+	}
+
 	return nil
 }
