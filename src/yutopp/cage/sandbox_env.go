@@ -247,6 +247,7 @@ func umountJail(base_dir string) error {
 	return nil
 }
 
+
 func umountJailedDir(base_dir string, mount string) error {
 	// unmount system's
 	target_dir := path.Join(base_dir, mount)
@@ -261,8 +262,6 @@ func umountJailedDir(base_dir string, mount string) error {
 
 	return nil
 }
-
-
 
 func umount(dir_name string) error {
 	log.Printf("= TRY TO UNMOUNT >> %s\n", dir_name)

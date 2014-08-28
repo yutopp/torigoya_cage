@@ -230,7 +230,7 @@ func managedExecChild(
  	setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only FSize Bytes
 
 	//
-	syscall.Umask(umask)
+	//syscall.Umask(umask)
 
 	// set PATH env
 	if path, ok := envs["PATH"]; ok {
@@ -255,14 +255,24 @@ func managedExecChild(
 		env_list = append(env_list, k + "=" + v)
 	}
 
-	fmt.Printf("managed exec :: syscall.Exec!\n")
+	log.Printf("managed exec :: syscall.Exec!\n")
 
 	// close unused pipe
 	if err := p.Result.Close(); err != nil { panic(err) }
 
+
+	log.Printf("==================================================\n")
+	out, err := exec.Command("/bin/ls", "-laR", "/home/torigoya").Output()
+	if err != nil {
+		log.Printf("error:: %s\n", err.Error())
+	} else {
+		log.Printf("passed:: %s\n", out)
+	}
+
+
 	// redirect stdin
 	if stdin_file_path != nil {
-		fmt.Printf("============= stdin (%v)\n", *stdin_file_path)
+		log.Printf("============= stdin (%v)\n", *stdin_file_path)
 		file, err := os.Open(*stdin_file_path)	// read
 		if err != nil { panic(err) }
 		defer file.Close()
@@ -285,7 +295,7 @@ func managedExecChild(
 	// exec!!
 	err = syscall.Exec(exec_path, args, env_list);
 
-	panic(errors.New(fmt.Sprintf("unreachable : " + err.Error())))
+	panic(errors.New(fmt.Sprintf("UNREACHABLE!! managedExecChild / failed to Exec. Error => " + err.Error())))
 }
 
 
