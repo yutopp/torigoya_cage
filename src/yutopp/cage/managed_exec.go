@@ -235,6 +235,21 @@ func (bm *BridgeMessage) managedExecChild(
 		log.Printf("passed:: \n%s\n", out)
 	}
 
+	log.Printf("==================================================\n")
+	out, err = exec.Command("/bin/ls", "-la", "/").Output()
+	if err != nil {
+		log.Printf("error:: %s\n", err.Error())
+	} else {
+		log.Printf("passed:: \n%s\n", out)
+	}
+
+	log.Printf("==================================================\n")
+	out, err = exec.Command("/bin/ls", "-laR", "/home/torigoya").Output()
+	if err != nil {
+		log.Printf("error:: %s\n", err.Error())
+	} else {
+		log.Printf("passed:: \n%s\n", out)
+	}
 
 	log.Printf("== Managed: child           (%v)\n", args)
 	log.Printf("== Managed: envs            (%v)\n", envs)
@@ -283,16 +298,6 @@ func (bm *BridgeMessage) managedExecChild(
 
 	// close unused pipe
 	if err := bm.Pipes.Result.Close(); err != nil { panic(err) }
-
-
-	log.Printf("==================================================\n")
-	out, err = exec.Command("/bin/ls", "-laR", "/home/torigoya").Output()
-	if err != nil {
-		log.Printf("error:: %s\n", err.Error())
-	} else {
-		log.Printf("passed:: \n%s\n", out)
-	}
-
 
 	// redirect stdin
 	if stdin_file_path != nil {

@@ -16,6 +16,8 @@ import (
 	"time"
 	"strconv"
 	"bytes"
+
+	"sync"
 )
 
 
@@ -412,6 +414,126 @@ int main() {
 	//
 	assertTestResult(t, &result, &expect_result)
 }
+
+
+func TestTicketBasicParallel(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	var wg sync.WaitGroup
+	for i := 0; i < 5; i++ {
+		wg.Add(1)
+
+		go func() {
+			defer wg.Done()
+
+			//
+			base_name := "aaa6" + strconv.FormatInt(time.Now().Unix(), 10) + strconv.Itoa(i)
+
+			//
+			sources := []*SourceData{
+				&SourceData{
+					"prog.cpp",
+					[]byte(`
+#include <iostream>
+
+int main() {
+	std::cout << "hello!" << std::endl;
+	int i;
+	std::cin >> i;
+	std::cout << "input is " << i << std::endl;
+}
+`),
+					false,
+				},
+			}
+
+			//
+			build_inst := &BuildInstruction{
+				CompileSetting: &ExecutionSetting{
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+				LinkSetting: &ExecutionSetting{
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			}
+
+			//
+			run_inst := &RunInstruction{
+				Inputs: []Input{
+					Input{
+						stdin: nil,
+						setting: &ExecutionSetting{
+							CpuTimeLimit: 10,
+							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+						},
+					},
+
+					Input{
+						stdin: &SourceData{
+							"hoge.in",
+							[]byte("100"),
+							false,
+						},
+						setting: &ExecutionSetting{
+							CpuTimeLimit: 10,
+							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+						},
+					},
+				},
+			}
+
+			//
+			ticket := &Ticket{
+				BaseName: base_name,
+				ProcId: 0,
+				ProcVersion: "test",
+				Sources: sources,
+				BuildInst: build_inst,
+				RunInst: run_inst,
+			}
+
+			// execute
+			var result test_result
+			result.run = make(map[int]*test_result_unit)
+			f := makeHelperCallback(&result)
+			if err := ctx.ExecTicket(ticket, f); err != nil {
+				t.Errorf(err.Error())
+				return
+			}
+
+			t.Logf("%V", result)
+
+			//
+			expect_result := test_result{
+				compile: test_result_unit{
+				},
+				link: test_result_unit{
+				},
+				run: map[int]*test_result_unit{
+					0: &test_result_unit{
+						out: []byte("hello!\ninput is 0\n"),
+					},
+					1: &test_result_unit{
+						out: []byte("hello!\ninput is 100\n"),
+					},
+				},
+			}
+
+			//
+			assertTestResult(t, &result, &expect_result)
+		}()
+	}
+
+	wg.Wait()
+}
+
 
 
 func TestTicketTLE(t *testing.T) {
