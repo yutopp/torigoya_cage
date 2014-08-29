@@ -40,6 +40,8 @@ func (bm *BridgeMessage) invokeProcessCloner(
 	cloner_dir		string,
 	output_stream	chan<-StreamOutput,
 ) (*ExecutedResult, error) {
+	log.Println(">> called invokeProcessCloner")
+
 	return invokeProcessClonerBase(cloner_dir, "process_cloner", bm, output_stream)
 }
 
@@ -88,7 +90,7 @@ func invokeProcessClonerBaseChild(
 	}
 
 	// exec!!
-	err = syscall.Exec(callback_path, args, envs);
+	err = syscall.Exec(cloner_path, args, envs);
 	if err != nil {
 		log.Printf("Error!!! %v", err)
 	}
@@ -217,12 +219,6 @@ func invokeProcessClonerBase(
 			return nil, errors.New("Process timeouted")
 		}
 	} // if pid
-
-
-
-
-
-
 }
 
 func readPipeAsync(

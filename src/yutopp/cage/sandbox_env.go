@@ -12,20 +12,40 @@ package torigoya
 
 import(
 	"os"
-	"os/exec"
 	"syscall"
 	"errors"
 	"fmt"
 	"path"
 	"log"
+
+	"unsafe"
 )
 
-// #define _BSD_SOURCE
-// #include <sys/types.h>
-// int devno(int major, int minor)
-// {
-//     return makedev( major, minor );
-// }
+/*
+#define _BSD_SOURCE
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/mount.h>
+
+int devno(int major, int minor)
+{
+    return makedev( major, minor );
+}
+
+int mount_proc()
+{
+	if (mount ("proc", "./proc", "proc", MS_RDONLY|MS_NOSUID|MS_NOEXEC|MS_NODEV, NULL) != 0) {
+		return -1;
+	}
+
+	return 0;
+}
+
+int lazy_umount(char const* path)
+{
+	return umount2(path, MNT_DETACH);
+}
+*/
 import "C"
 
 
@@ -131,8 +151,22 @@ func buildChrootEnv(
 		if err := os.MkdirAll("proc", 0555); err != nil {
 			return errors.New(fmt.Sprintf("failed to mkdir proc (%s)", err))
 		}
+		if r := int(C.mount_proc()); r != 0 {
+			return errors.New(fmt.Sprintf("failed to mount proc (%d)", r))
+		}
+/*
 		if err := syscall.Mount(
-			"/proc",
+			"none",
+			"./proc",
+			"",
+			syscall.MS_SLAVE | syscall.MS_REC,
+			"",
+		); err != nil {
+			return errors.New(fmt.Sprintf("remount proc private (%s)", err))
+		}
+
+		if err := syscall.Mount(
+			"proc",
 			"./proc",
 			"proc",
 			syscall.MS_BIND | syscall.MS_RDONLY | syscall.MS_NOSUID | syscall.MS_NODEV,
@@ -140,7 +174,7 @@ func buildChrootEnv(
 		); err != nil {
 			return errors.New(fmt.Sprintf("failed to mount /proc -> ./proc (%s)", err))
 		}
-
+*/
 
 		// mount /tmp
 		if err := os.MkdirAll("tmp", 0777); err != nil {
@@ -226,27 +260,31 @@ func makeNode(nodename string, dev int, perm os.FileMode) error {
 	return nil
 }
 
-func umountJail(base_dir string) error {
+func umountJail(base_dir string) []error {
+	var errs []error = nil
+
 	// unmount system's
 	for i := len(readOnlyMounts)-1; i >= 0; i-- {
 		if err := umountJailedDir(base_dir, readOnlyMounts[i]); err != nil {
-			return err
+			if errs == nil { errs = []error{} }
+			errs = append(errs, err)
 		}
 	}
 
 	//
 	if err := umountJailedDir(base_dir, "/tmp"); err != nil {
-		return err
+		if errs == nil { errs = []error{} }
+		errs = append(errs, err)
 	}
 
 	//
 	if err := umountJailedDir(base_dir, "/proc"); err != nil {
-		return err
+		if errs == nil { errs = []error{} }
+		errs = append(errs, err)
 	}
 
-	return nil
+	return errs
 }
-
 
 func umountJailedDir(base_dir string, mount string) error {
 	// unmount system's
@@ -264,10 +302,15 @@ func umountJailedDir(base_dir string, mount string) error {
 }
 
 func umount(dir_name string) error {
+	cs := C.CString(dir_name)
+	defer C.free(unsafe.Pointer(cs))
+
 	log.Printf("= TRY TO UNMOUNT >> %s\n", dir_name)
-	umount_command := exec.Command("umount", "-l", dir_name)	// lazy umount
-	if err := umount_command.Run(); err != nil {
-		return errors.New("Failed to umount: " + dir_name + " | err: " + err.Error())
+	if ret := int(C.lazy_umount(cs)); ret != 0 {
+		e := errors.New(fmt.Sprintf("Failed to umount: %s | err: %d", dir_name, ret))
+
+		log.Println(e.Error())
+		return e
 	}
 
 	return nil

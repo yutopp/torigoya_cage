@@ -111,9 +111,9 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 	//
 	if fileExists(user_dir_path) {
 		log.Printf("user directory %s is already existed, so remove them\n", user_dir_path)
-		if err := umountJail(user_dir_path); err != nil {
-			return nil, errors.New(fmt.Sprintf("Couldn't unmount directory %s (%s)", user_dir_path, err))
-		}
+//		if err := umountJail(user_dir_path); err != nil {
+//			return nil, errors.New(fmt.Sprintf("Couldn't unmount directory %s (%s)", user_dir_path, err))
+//		}
 		if err := os.RemoveAll(user_dir_path); err != nil {
 			return nil, errors.New(fmt.Sprintf("Couldn't remove directory %s (%s)", user_dir_path, err))
 		}
@@ -304,9 +304,9 @@ func (ctx *Context) cleanupMountedFiles(
 	dirs, err := filepath.Glob(filepath.Join(user_dir_path, "/*"))
 	if err != nil { return err }
 
-	if err := umountJail(user_dir_path); err != nil {
-		return errors.New(fmt.Sprintf("Couldn't unmount directory %s (%s)", user_dir_path, err))
-	}
+//	if err := umountJail(user_dir_path); err != nil {
+//		return errors.New(fmt.Sprintf("Couldn't unmount directory %s (%s)", user_dir_path, err))
+//	}
 
 	for _, dir := range dirs {
 		rel_dir, err := filepath.Rel(user_dir_path, dir)

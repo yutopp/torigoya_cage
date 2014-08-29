@@ -1,3 +1,7 @@
 #!/usr/bin/env bash
-sudo bin/cage.server --update true
-#sudo bin/cage.server
+
+if [ $1 == "skip" ]; then
+    sudo bin/cage.server
+else
+    sudo bin/cage.server --update true
+fi

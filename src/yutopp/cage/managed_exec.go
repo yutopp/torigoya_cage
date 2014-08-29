@@ -73,6 +73,9 @@ func (bm *BridgeMessage) managedExec(
 		defer func() {
 			syscall.Close(bm.Pipes.Stdout.WriteFd)
 			syscall.Close(bm.Pipes.Stderr.WriteFd)
+
+			//
+			umountJail(bm.ChrootPath);
 		}()
 
 		//
@@ -224,6 +227,14 @@ func (bm *BridgeMessage) managedExecChild(
 	}
 	// !!! ===================
 
+	log.Printf("==================================================\n")
+	out, err := exec.Command("/bin/ps", "aux").Output()
+	if err != nil {
+		log.Printf("error:: %s\n", err.Error())
+	} else {
+		log.Printf("passed:: \n%s\n", out)
+	}
+
 
 	log.Printf("== Managed: child           (%v)\n", args)
 	log.Printf("== Managed: envs            (%v)\n", envs)
@@ -242,7 +253,8 @@ func (bm *BridgeMessage) managedExecChild(
  	setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only FSize Bytes
 
 	//
-	//syscall.Umask(umask)
+	syscall.Umask(umask)
+
 
 	// set PATH env
 	if path, ok := envs["PATH"]; ok {
@@ -274,11 +286,11 @@ func (bm *BridgeMessage) managedExecChild(
 
 
 	log.Printf("==================================================\n")
-	out, err := exec.Command("/bin/ls", "-laR", "/home/torigoya").Output()
+	out, err = exec.Command("/bin/ls", "-laR", "/home/torigoya").Output()
 	if err != nil {
 		log.Printf("error:: %s\n", err.Error())
 	} else {
-		log.Printf("passed:: %s\n", out)
+		log.Printf("passed:: \n%s\n", out)
 	}
 
 
@@ -323,7 +335,6 @@ func fork() (int, error) {
 
 
 func setLimit(resource int, value uint64) {
-	//
 	if err := syscall.Setrlimit(resource, &syscall.Rlimit{value, value}); err != nil {
 		panic(err)
 	}

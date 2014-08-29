@@ -29,11 +29,19 @@ static_assert( sizeof( pid_t ) == sizeof( int ), "sizeof( pid_t ) != sizeof( int
 //
 int fork_shell( void* /* unused */ )
 {
-    // mount procfs (IMPORTANT)
-    if ( ::mount( "", "/proc", "proc", 0, nullptr ) == -1 ) {
-        std::cerr << "Failed to mount procfs." << std::endl;
+/*
+    if ( ::unshare( CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWIPC | CLONE_NEWUTS | SIGCHLD | CLONE_UNTRACED ) == -1 ) {
+        std::cerr << "unshare error: " << strerror(errno) << std::endl;
         return -1;
     }
+*/
+/*
+    // mount procfs (IMPORTANT)
+    if ( ::mount( "proc", "/proc", "proc", 0, nullptr ) == -1 ) {
+       std::cerr << "Failed to mount procfs." << std::endl;
+        return -1;
+    }
+*/
 
     //
     char* const callback_executable_r = getenv( "callback_executable" );
@@ -78,6 +86,9 @@ int fork_shell( void* /* unused */ )
 // entry
 int main( int argc, char* argv[] )
 {
+    //
+    std::cout << "%%%%%%%%%% SANDBOX: clone begin - parents - PID: " << getpid() << std::endl;
+
     // stack size: 8KBytes
     std::size_t const stack_for_child_size = 8 * 1024;
     auto const stack_for_child =
@@ -95,7 +106,7 @@ int main( int argc, char* argv[] )
         std::cerr << "Clone failed. PID namespaces ARE NOT supported" << std::endl;
         return -1;
     }
-    std::cout << "%%%%%%%%%% SANDBOX: fork end - parents - PID: " << getpid() << std::endl;
+    std::cout << "%%%%%%%%%% SANDBOX: clone end - parents - PID: " << getpid() << std::endl;
 
     //
     int status;
