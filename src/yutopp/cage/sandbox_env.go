@@ -12,6 +12,7 @@ package torigoya
 
 import(
 	"os"
+	"os/exec"
 	"syscall"
 	"errors"
 	"fmt"
@@ -64,6 +65,16 @@ func (bm *BridgeMessage) IntoJail() error {
 		return err
 	}
 
+{
+	log.Printf("last =!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!\n")
+	out, err := exec.Command("/bin/ls", "-la", "/").Output()
+	if err != nil {
+		log.Printf("error:: %s\n", err.Error())
+	} else {
+		log.Printf("passed:: \n%s\n", out)
+	}
+}
+
 	// Drop privilege(group)
 	if err := syscall.Setresgid(
 		bm.JailedUser.GroupId,
@@ -82,6 +93,16 @@ func (bm *BridgeMessage) IntoJail() error {
 		return errors.New("Could NOT drop USER privilege")
 	}
 
+/*
+	log.Printf("last =!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!\n")
+	log.Printf("====> %v \n", bm.JailedUser.UserId)
+	out, err := exec.Command("/bin/ls", "-la", "/").Output()
+	if err != nil {
+		log.Printf("error:: %s\n", err.Error())
+	} else {
+		log.Printf("passed:: \n%s\n", out)
+	}
+*/
 	return nil
 }
 
@@ -135,20 +156,22 @@ func buildChrootEnv(
 				return errors.New(fmt.Sprintf("failed to mkdir -> %s (%s)", local_mount_name, err))
 			}
 
-			err = syscall.Mount(
+			if err := syscall.Mount(
 				host_mount_name,
 				local_mount_name,
-				"",
+				"none",
 				syscall.MS_BIND | syscall.MS_RDONLY | syscall.MS_NOSUID | syscall.MS_NODEV,
 				"",
-			)
+			); err != nil {
+				return errors.New(fmt.Sprintf("failed to mount %s (%s)", host_mount_name, err))
+			}
 
 			log.Printf("mounted: %s\n", host_mount_name)
 		}
 
 
 		// mount procfs
-		if err := os.MkdirAll("proc", 0555); err != nil {
+		if err := os.MkdirAll("proc", 0755); err != nil {
 			return errors.New(fmt.Sprintf("failed to mkdir proc (%s)", err))
 		}
 		if r := int(C.mount_proc()); r != 0 {
@@ -241,6 +264,22 @@ func buildChrootEnv(
 
 	log.Printf("<- buildChrootEnv");
 
+/*
+	log.Printf("=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!\n")
+	out, err := exec.Command("/bin/ls", "-la", "/").Output()
+	if err != nil {
+		log.Printf("error:: %s\n", err.Error())
+	} else {
+		log.Printf("passed:: \n%s\n", out)
+	}
+	log.Printf(">> =!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!\n")
+	out, err = exec.Command("/bin/ls", "-la", "/bin").Output()
+	if err != nil {
+		log.Printf("error:: %s\n", err.Error())
+	} else {
+		log.Printf("passed:: \n%s\n", out)
+	}
+*/
 	return nil
 }
 

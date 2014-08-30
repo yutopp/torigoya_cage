@@ -329,9 +329,9 @@ func (bm *BridgeMessage) managedExecChild(
 
 
 func fork() (int, error) {
-//	syscall.ForkLock.Lock()
+	syscall.ForkLock.Lock()
 	pid, _, err := syscall.Syscall(syscall.SYS_FORK, 0, 0, 0)
-//	syscall.ForkLock.Unlock()
+	syscall.ForkLock.Unlock()
 	if err != 0 {
 		return -1, err
 	}

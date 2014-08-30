@@ -169,21 +169,29 @@ func invokeProcessClonerBase(
 		go readPipeAsync(stderr_pipe.ReadFd, stderr_err, StderrFd, force_close_err, output_stream)
 
 		//
+		force_quit := false
+
+		//
 		defer func() {
+			log.Printf("wait for closeing wait_pid_chan => %v\n", force_quit)
 			close(wait_pid_chan)
 
 			force_close_out <- true
 			force_close_err <- true
 
 			// block
+			log.Printf("wait for recieving stdout_err\n")
 			if err := <-stdout_err; err != nil {
 				log.Printf("??STDOUT ERROR: %v\n", err)
 			}
+			log.Printf("wait for closeing stdout_err\n")
 			close(force_close_out)
 
+			log.Printf("wait for recieving stderr_err\n")
 			if err := <-stderr_err; err != nil {
 				log.Printf("??STDERR ERROR: %v\n", err)
 			}
+			log.Printf("wait for closeing stderr_err\n")
 			close(force_close_err)
 		}()
 
@@ -209,6 +217,10 @@ func invokeProcessClonerBase(
 			log.Printf("  => command      : %v", result.CommandLine)
 			log.Printf("  => status       : %v", result.Status)
 			log.Printf("  => system error : %v", result.SystemErrorMessage)
+
+			if result.Status == 5 {
+				force_quit = true
+			}
 
 			return result, err
 

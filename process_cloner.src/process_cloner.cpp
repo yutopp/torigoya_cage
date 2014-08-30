@@ -100,7 +100,7 @@ int main( int argc, char* argv[] )
     //
     pid_t const child_pid = ::clone( fork_shell,
                                      stack_for_child->data() + stack_for_child->size(),
-                                     CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWIPC | CLONE_NEWUTS | SIGCHLD | CLONE_UNTRACED,
+                                     CLONE_NEWPID | CLONE_NEWNS | CLONE_NEWNET | CLONE_NEWIPC | CLONE_NEWUTS | SIGCHLD | CLONE_UNTRACED/* | CLONE_NEWUSER*/,
                                      nullptr );
     if ( child_pid == -1 ) {
         std::cerr << "Clone failed. PID namespaces ARE NOT supported" << std::endl;

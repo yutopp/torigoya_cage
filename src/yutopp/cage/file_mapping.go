@@ -128,6 +128,17 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 		return nil, err
 	}
 
+
+{
+	log.Printf("last =!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!\n")
+	out, err := exec.Command("/bin/ls", "-la", user_dir_path).Output()
+	if err != nil {
+		log.Printf("error:: %s\n", err.Error())
+	} else {
+		log.Printf("passed:: \n%s\n", out)
+	}
+}
+
 	// ========================================
 	//// create user HOME directory
 
@@ -226,6 +237,11 @@ func (ctx *Context) reassignTarget(
 
 	//
 	user_dir_path = ctx.makeUserDirName(base_name)
+
+	//
+	if err := guardPath(user_dir_path, host_user_id, managed_group_id, 0550); err != nil {
+		return "", nil, err
+	}
 
 	// chmod /home // host_user_id:managed_group_id // r-x/r-x/---
 	user_home_base_path := filepath.Join(user_dir_path, ctx.homeDir)

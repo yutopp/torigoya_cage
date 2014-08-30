@@ -425,14 +425,14 @@ func TestTicketBasicParallel(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 4; i++ {
 		wg.Add(1)
 
-		go func() {
+		go func(no int) {
 			defer wg.Done()
 
 			//
-			base_name := "aaa6" + strconv.FormatInt(time.Now().Unix(), 10) + strconv.Itoa(i)
+			base_name := "aaa7" + strconv.FormatInt(time.Now().Unix(), 10) + strconv.Itoa(no)
 
 			//
 			sources := []*SourceData{
@@ -528,7 +528,7 @@ int main() {
 
 			//
 			assertTestResult(t, &result, &expect_result)
-		}()
+		}(i)
 	}
 
 	wg.Wait()
