@@ -14,6 +14,8 @@ import(
 	"errors"
 	"fmt"
 	"syscall"
+
+	"log"
 )
 
 
@@ -21,13 +23,17 @@ func (bm *ExecutedResult) sendTo(p *BridgePipes) error {
 	buf, err := bm.Encode()
 	if err != nil { return err }
 
-	syscall.Close(p.Result.ReadFd)
+	p.Result.CloseRead()
+
+	log.Printf("sendTo :: result => \n", buf)
 
 	n, err := syscall.Write(p.Result.WriteFd, buf)
 	if err != nil { return errors.New(fmt.Sprintf("sendTo:: %v", err))  }
 	if n != len(buf) { return errors.New(fmt.Sprintf("sendTo:: couldn't write bytes (%d)", n)) }
 
-	syscall.Close(p.Result.WriteFd)
+	log.Printf("sent a result!\n")
+
+	//p.Result.CloseWrite()
 
 	return nil
 }

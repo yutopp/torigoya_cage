@@ -129,16 +129,6 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 	}
 
 
-{
-	log.Printf("last =!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!\n")
-	out, err := exec.Command("/bin/ls", "-la", user_dir_path).Output()
-	if err != nil {
-		log.Printf("error:: %s\n", err.Error())
-	} else {
-		log.Printf("passed:: \n%s\n", out)
-	}
-}
-
 	// ========================================
 	//// create user HOME directory
 

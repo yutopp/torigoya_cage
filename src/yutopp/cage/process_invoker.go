@@ -114,7 +114,7 @@ func invokeProcessClonerBase(
 	if err != nil { return nil, err }
 	defer stderr_pipe.Close()
 
-	result_pipe, err := makePipeWithFlags(syscall.O_CLOEXEC)
+	result_pipe, err := makePipe() //WithFlags(syscall.O_CLOEXEC)
 	if err != nil { return nil, err }
 	defer result_pipe.Close()
 
@@ -152,6 +152,7 @@ func invokeProcessClonerBase(
 		//
 		stdout_pipe.CloseWrite()
 		stderr_pipe.CloseWrite()
+		result_pipe.CloseWrite()
 
 		// parent process
 		wait_pid_chan := make(chan *os.ProcessState)
@@ -193,6 +194,8 @@ func invokeProcessClonerBase(
 			}
 			log.Printf("wait for closeing stderr_err\n")
 			close(force_close_err)
+
+			log.Printf("closed!\n")
 		}()
 
 		// wait for finishing subprocess
@@ -205,24 +208,47 @@ func invokeProcessClonerBase(
 				return nil, errors.New("Process finished with failed state")
 			}
 
-			//
-			result_pipe.CloseWrite()
-			result_buf, _ := readPipe(result_pipe.ReadFd)
-			result, err := DecodeExecuteResult(result_buf)
-			log.Printf("??RESULT!!!!!!! : err => %v", err)
-			log.Printf("  => sec          : %v", result.UsedCPUTimeSec)
-			log.Printf("  => mem          : %v", result.UsedMemoryBytes)
-			log.Printf("  => signal       : %v", result.Signal)
-			log.Printf("  => return code  : %v", result.ReturnCode)
-			log.Printf("  => command      : %v", result.CommandLine)
-			log.Printf("  => status       : %v", result.Status)
-			log.Printf("  => system error : %v", result.SystemErrorMessage)
 
-			if result.Status == 5 {
-				force_quit = true
+			result_buf_ch := make(chan []byte)
+			result_err_ch := make(chan error)
+			go func() {
+				log.Printf("waiting a result...\n")
+				result_buf, err := readPipe(result_pipe.ReadFd)
+				if err != nil {
+					result_err_ch <- err
+					return
+				}
+
+				log.Printf("got a result...\n")
+				result_buf_ch <- result_buf
+			}()
+
+			select {
+			case result_buf := <-result_buf_ch:
+				result, err := DecodeExecuteResult(result_buf)
+				if err != nil { return nil, err }
+
+				log.Printf("??RESULT!!!!!!! : err => %v", err)
+				log.Printf("  => sec          : %v", result.UsedCPUTimeSec)
+				log.Printf("  => mem          : %v", result.UsedMemoryBytes)
+				log.Printf("  => signal       : %v", result.Signal)
+				log.Printf("  => return code  : %v", result.ReturnCode)
+				log.Printf("  => command      : %v", result.CommandLine)
+				log.Printf("  => status       : %v", result.Status)
+				log.Printf("  => system error : %v", result.SystemErrorMessage)
+
+				if result.Status == 5 {
+					force_quit = true
+				}
+
+				return result, err
+
+			case result_err := <-result_err_ch:
+				return nil, result_err
+
+			case <-time.After(time.Second * 1):
+				return nil, errors.New("Timeout, failed to get a result...")
 			}
-
-			return result, err
 
 		case <-time.After(500 * time.Second):
 			// TODO: fix
@@ -282,6 +308,9 @@ func readPipeAsync(
 				Buffer: copied,
 			}
 		}
+
+		//
+		time.Sleep(1 * time.Millisecond)
 	}
 
 

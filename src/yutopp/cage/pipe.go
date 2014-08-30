@@ -48,13 +48,21 @@ func (p *Pipe) CloseWrite() error {
 }
 
 func (p *Pipe) Dup() (*Pipe, error) {
-	new_readfd, err := syscall.Dup(p.ReadFd)
-	if err != nil { return nil, err }
+	var err error
 
-	new_writefd, err := syscall.Dup(p.WriteFd)
-	if err != nil { return nil, err }
+	var new_readfd int = -1
+	if !p.readClosed {
+		new_readfd, err = syscall.Dup(p.ReadFd)
+		if err != nil { return nil, err }
+	}
 
-	return &Pipe{new_readfd, new_writefd, false, false}, nil
+	var new_writefd int = -1
+	if !p.writeClosed {
+		new_writefd, err = syscall.Dup(p.WriteFd)
+		if err != nil { return nil, err }
+	}
+
+	return &Pipe{new_readfd, new_writefd, p.readClosed, p.writeClosed}, nil
 }
 
 // ================================================================================

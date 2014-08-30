@@ -425,7 +425,7 @@ func TestTicketBasicParallel(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 4; i++ {
+	for i := 0; i < 16; i++ {
 		wg.Add(1)
 
 		go func(no int) {

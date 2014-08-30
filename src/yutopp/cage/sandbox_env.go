@@ -12,7 +12,6 @@ package torigoya
 
 import(
 	"os"
-	"os/exec"
 	"syscall"
 	"errors"
 	"fmt"
@@ -65,16 +64,6 @@ func (bm *BridgeMessage) IntoJail() error {
 		return err
 	}
 
-{
-	log.Printf("last =!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!\n")
-	out, err := exec.Command("/bin/ls", "-la", "/").Output()
-	if err != nil {
-		log.Printf("error:: %s\n", err.Error())
-	} else {
-		log.Printf("passed:: \n%s\n", out)
-	}
-}
-
 	// Drop privilege(group)
 	if err := syscall.Setresgid(
 		bm.JailedUser.GroupId,
@@ -93,16 +82,6 @@ func (bm *BridgeMessage) IntoJail() error {
 		return errors.New("Could NOT drop USER privilege")
 	}
 
-/*
-	log.Printf("last =!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!=!\n")
-	log.Printf("====> %v \n", bm.JailedUser.UserId)
-	out, err := exec.Command("/bin/ls", "-la", "/").Output()
-	if err != nil {
-		log.Printf("error:: %s\n", err.Error())
-	} else {
-		log.Printf("passed:: \n%s\n", out)
-	}
-*/
 	return nil
 }
 
