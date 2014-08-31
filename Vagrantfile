@@ -15,6 +15,10 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # port 12321 is used by torigoya cage server
   config.vm.network "forwarded_port", guest: 23432, host: 23432, auto_correct: true
 
+  # for development
+  config.vm.network :private_network, ip: "192.168.33.20", virtualbox__intnet: "torigoya_dev"
+
+
   config.vm.provider :virtualbox do |vb|
     vb.customize ["modifyvm", :id, "--memory", 1024]
     # http://stackoverflow.com/questions/22901859/cannot-make-outbound-http-requests-from-vagrant-vm

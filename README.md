@@ -2,28 +2,16 @@
 **!!under construction!!**
 Currently, this program may harm your computer. **PLEASE EXECUTE THIS PROGRAM IN THE VIRTUAL ENVIRONMENT.** *PLEASE EXECUTE THIS PROGRAM IN THE VIRTUAL ENVIRONMENT.* ***PLEASE EXECUTE THIS PROGRAM IN THE VIRTUAL ENVIRONMENT.***
 
+## OS Support
+Only `Ubuntu 14.01 64bit`
 
 ## Development
-
-```
-git clone git@github.com:yutopp/torigoya_proc_profiles.git
-git clone git@github.com:yutopp/torigoya_package_scripts.git
-git clone git@github.com:yutopp/torigoya_factory.git
-```
-You can use Vagrantfile for debbuging.
-Execute `vagrant up` and `vagrant ssh`, then `cd /vagrant` and please use `host.*.sh` scripts.
-
-## Testing
-```
-docker.run_core_test.sh
-docker.run_system_test.sh
-docker.run_system_test.sh remote
-```
+See [wiki](https://github.com/yutopp/torigoya_cage/wiki)(Japanese)
 
 ## Requirement
-[Docker](http://www.docker.com/ "Docker")
+[Vagrant](http://www.vagrantup.com/ "Vagrant")
 
-[Vagrant](http://www.vagrantup.com/ "Vagrant")(recommended)
+[Docker](http://www.docker.com/ "Docker")(optional)
 
 ## License
 
