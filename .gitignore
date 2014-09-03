@@ -11,3 +11,7 @@ cpu.pprof
 cpu.txt
 mem.pprof
 mem.txt
+
+.bundle
+vendor/
+*.lock

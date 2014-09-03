@@ -50,6 +50,7 @@ func main() {
 	config_path := flag.String("config_path", "config.yml", "path to config.yml")
 	mode := flag.String("mode", "release", "select mode from config")
 	update := flag.Bool("update", false, "do update")
+	pid := flag.Int("pid", -1, "a pid that receives a signal when the server startup")
 	flag.Parse()
 
 	//
@@ -149,5 +150,5 @@ func main() {
 	}()
 
 	// host, port
-	torigoya.RunServer(target_config.Host, target_config.Port, ctx, e)
+	torigoya.RunServer(target_config.Host, target_config.Port, ctx, e, *pid)
 }

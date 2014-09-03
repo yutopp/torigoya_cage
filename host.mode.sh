@@ -25,10 +25,12 @@ case "$1" in
         cp files/torigoya-packages.list /etc/apt/sources.list.d/torigoya-packages.list
         echo "Set to 'release' mode"
         ;;
+
     "debug")
         cp files/torigoya-packages.debug.list /etc/apt/sources.list.d/torigoya-packages.list
         echo "Set to 'debug' mode"
         ;;
+
     *)
         echo "An argument must be 'release' or 'debug'"
         ;;

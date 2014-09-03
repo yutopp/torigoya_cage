@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"os"
+	"syscall"
 )
 
 
@@ -19,6 +21,7 @@ func RunServer(
 	port int,
 	context *Context,
 	notifier chan<-error,
+	notify_pid int,
 ) error {
 	laddr := makeAddress(host, port)
 	listener, err := net.Listen("tcp", laddr)
@@ -30,6 +33,17 @@ func RunServer(
 
 	// there are no error
 	if notifier != nil { notifier <- nil }
+
+	//
+	if notify_pid != -1 {
+		process, err := os.FindProcess(notify_pid)
+		if err != nil {
+			log.Panicf("Error (%v)\n", err)
+		}
+		if err := process.Signal(syscall.SIGUSR1); err != nil {
+			log.Panicf("Error (%v)\n", err)
+		}
+	}
 
 	for {
 		// Wait for a connection.

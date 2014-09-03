@@ -142,8 +142,10 @@ func (ctx *Context) ReloadProcTable() error {
 }
 
 func (ctx *Context) UpdateProcTable() error {
-	if err := ctx.procConfTable.UpdateFromWeb(ctx.procSrcZipAddress, ctx.basePath); err != nil {
-		return err
+	if ctx.procSrcZipAddress != "" {
+		if err := ctx.procConfTable.UpdateFromWeb(ctx.procSrcZipAddress, ctx.basePath); err != nil {
+			return err
+		}
 	}
 
 	return ctx.ReloadProcTable()

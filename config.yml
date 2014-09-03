@@ -1,8 +1,8 @@
 system_test_mode:
   host: "0.0.0.0"
-  port: 23432
+  port: 49800
   host_user: "root"
-  lang_proc_config_dir: "${base}/proc_profiles"
+  lang_proc_config_dir: "${base}/torigoya_proc_profiles"
   lang_proc_update_zip_address: ""
   proc_package_type: "deb"
   proc_package_deb_source_list: "sources.list.d/torigoya-packages.list"

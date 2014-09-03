@@ -16,7 +16,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.network "forwarded_port", guest: 23432, host: 23432, auto_correct: true
 
   # for development
-  config.vm.network :private_network, ip: "192.168.33.20", virtualbox__intnet: "torigoya_dev"
+  config.vm.network "private_network", ip: "192.168.33.20", virtualbox__intnet: "torigoya_dev"
 
 
   config.vm.provider :virtualbox do |vb|
@@ -33,5 +33,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
                                           "sudo apt-get -y update",
                                           "sudo apt-get -y upgrade",
                                           "sudo apt-get -y install golang build-essential git unzip",
+                                          "sudo apt-get -y install ruby ruby-dev",
+                                          "gem install bundler --no-rdoc --no-ri",
+                                          "cd /vagrant; bundle install --path vendor/bundler",
+                                          "cd /vagrant; bundle install --path vendor/bundler"
                                          ].join("; ")
 end
