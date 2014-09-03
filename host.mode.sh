@@ -18,7 +18,12 @@ else
     exit 1
 fi
 
-echo "== This environment is $mode mode."
+if [ "$1" != "t" ]; then
+    echo "== This environment is $mode mode."
+else
+    echo "$mode"
+    exit 0
+fi
 
 case "$1" in
     "release")

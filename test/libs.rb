@@ -33,49 +33,10 @@ end
 
 
 class TicketTest
-  def initialize(case_name, result, expected)
+  def initialize()
     @passed = 0
     @skipped = 0
     @failed = 0
-    assert_ticket(case_name, result, expected)
-  end
-
-  private
-  def assert(key, r, e)
-    if e.is_a?(Undefined)
-      puts "SKIPPED: #{key} is not specified".yellow
-      @skipped += 1
-    else
-      if r != e
-        puts "FAILED: #{key}: result (#{r}) but expected (#{e})".red
-        @failed += 1
-      else
-        puts "PASSED : #{key}".green
-        @passed += 1
-      end
-    end
-  end
-
-  def assert_result(r, e)
-    assert("result/status", r.status, e.status)
-    assert("result/cpu", r.used_cpu_time_sec, e.used_cpu_time_sec)
-    assert("result/memoy", r.used_memory_bytes, e.used_memory_bytes)
-    assert("result/signal", r.signal, e.signal)
-    assert("result/exit", r.return_code, e.return_code)
-    assert("result/command_line", r.command_line, e.command_line)
-    assert("result/system_error", r.system_error_message, e.system_error_message)
-  end
-
-  def assert_result_unit(r, e)
-    assert("out", r.out, e.out)
-    assert("err", r.err, e.err)
-
-    if e.result.nil?
-      puts "SKIPPED: result is not specified".yellow
-      @skipped += 1
-    else
-      assert_result(r.result, e.result)
-    end
   end
 
   def assert_ticket(case_name, result, expected)
@@ -148,11 +109,51 @@ class TicketTest
     finish_t = Time.now
     puts "<<=== [".blue + (@failed == 0 ? "OK".green : "FAILED".red) + "]".blue + " / passed: #{@passed}".green + " / failed: #{@failed}".red + " / skipped: #{@skipped}".yellow + " -- #{finish_t-start_t} sec"
     puts ""
+
+    return case_name + " - " + "[".blue + (@failed == 0 ? "OK".green : "FAILED".red) + "]".blue + " / passed: #{@passed}".green + " / failed: #{@failed}".red + " / skipped: #{@skipped}".yellow + " -- #{finish_t-start_t} sec", @failed == 0
+  end
+
+  private
+  def assert(key, r, e)
+    if e.is_a?(Undefined)
+      puts "SKIPPED: #{key} is not specified".yellow
+      @skipped += 1
+    else
+      if r != e
+        puts "FAILED: #{key}: result (#{r}) but expected (#{e})".red
+        @failed += 1
+      else
+        puts "PASSED : #{key}".green
+        @passed += 1
+      end
+    end
+  end
+
+  def assert_result(r, e)
+    assert("result/status", r.status, e.status)
+    assert("result/cpu", r.used_cpu_time_sec, e.used_cpu_time_sec)
+    assert("result/memoy", r.used_memory_bytes, e.used_memory_bytes)
+    assert("result/signal", r.signal, e.signal)
+    assert("result/exit", r.return_code, e.return_code)
+    assert("result/command_line", r.command_line, e.command_line)
+    assert("result/system_error", r.system_error_message, e.system_error_message)
+  end
+
+  def assert_result_unit(r, e)
+    assert("out", r.out, e.out)
+    assert("err", r.err, e.err)
+
+    if e.result.nil?
+      puts "SKIPPED: result is not specified".yellow
+      @skipped += 1
+    else
+      assert_result(r.result, e.result)
+    end
   end
 end
 
 
 
 def assert_ticket(case_name, result, expected)
-  TicketTest.new(case_name, result, expected)
+  return TicketTest.new().assert_ticket(case_name, result, expected)
 end

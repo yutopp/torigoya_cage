@@ -24,6 +24,9 @@ def run_test()
 
   puts "Torigoya system test: run #{test_paths.length} tests"
 
+  results = []
+  failed_num = 0
+
   test_paths.each do |dir_name|
     Dir.chdir(dir_name) do
       unless cases.nil?
@@ -121,7 +124,9 @@ def run_test()
           ticket = c.exec_ticket(ticket)
           expected_ticket = TorigoyaKit::TicketResult.new(compile_expect, link_expect, run_expect)
 
-          assert_ticket("#{File.basename(dir_name)} - #{unit_path}", ticket, expected_ticket)
+          result, s = assert_ticket("#{File.basename(dir_name)} - #{unit_path}", ticket, expected_ticket)
+          results << result
+          failed_num += 1 if s == false
 
         rescue => e
           p e
@@ -132,6 +137,16 @@ def run_test()
         end
       end
     end
+  end # test_paths.each
+
+  puts "== ALL TEST FINISHED =="
+  puts results
+  puts ""
+  if failed_num == 0
+    puts "====> ALL GREEN!!".green
+  else
+    puts "====> FAILED...".red
   end
+  puts "======================="
 
 end # def run_test

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"os/signal"
 	"syscall"
 )
 
@@ -30,6 +31,16 @@ func RunServer(
 		return err
 	}
 	defer listener.Close()
+
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		for _ = range c {
+			log.Printf("Signal captured\n")
+			listener.Close()
+			os.Exit(0)
+		}
+	}()
 
 	// there are no error
 	if notifier != nil { notifier <- nil }
