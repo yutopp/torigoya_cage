@@ -97,10 +97,12 @@ type ProtocolHandler struct {
 
 func (ph *ProtocolHandler) read(reader io.Reader) (MessageKind, interface{}, error) {
 	// read protocol
+
+	// read header
 	n, err := reader.Read(ph.header_buffer[:])
 	if err != nil { return MessageKindInvalid, nil, err }
 	if n < HeaderLength {
-		return MessageKindInvalid, nil, errors.New("")
+		return MessageKindInvalid, nil, errors.New("invalid header length")
 	}
 	log.Printf("read length:%d / bal: %v\n", n, ph.header_buffer[:n])
 
@@ -112,19 +114,23 @@ func (ph *ProtocolHandler) read(reader io.Reader) (MessageKind, interface{}, err
 	if err := binary.Read(bytes.NewReader(ph.header_buffer[1:]), binary.LittleEndian, &length); err != nil {
 		return MessageKindInvalid, nil, err
 	}
+	log.Printf("length of data: %d\n", length)
 
-	// TODO: add limitation of length
+	// source code limit: 256KB
+	if length > 256 * 1024 {
+		return MessageKindInvalid, nil, errors.New("SourceCode length limitation")
+	}
 
 	//
 	if uint32(len(ph.buffer)) < length {
 		ph.buffer = make([]byte, length)
 	}
-	n, err = reader.Read(ph.buffer[:])
+	n, err = io.ReadFull(reader, ph.buffer)
 	if err != nil {
 		return MessageKindInvalid, nil, err
 	}
 	if uint32(n) != length {
-		return MessageKindInvalid, nil, errors.New("")
+		return MessageKindInvalid, nil, errors.New(fmt.Sprintf("%d", n))
 	}
 
 	//

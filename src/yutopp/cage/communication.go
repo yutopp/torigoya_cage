@@ -138,7 +138,7 @@ func acceptGreeting(
 	//
 	kind, data, err := handler.read(c)
 	if err != nil {
-		e := errors.New(fmt.Sprintf("Reciever error(%v)", err))
+		e := errors.New(fmt.Sprintf("Reciever error at Greeting(%V)", err))
 		error_event <- e
 		return e
 	}
@@ -193,7 +193,7 @@ func acceptRequestMessage(
 	//
 	kind, data, err := handler.read(c)
 	if err != nil {
-		error_event <- errors.New(fmt.Sprintf("Reciever error(%v)", err))
+		error_event <- errors.New(fmt.Sprintf("Reciever error at acceptRequestMessage(%V)", err))
 		return
 	}
 	log.Printf("Server::Recieved: %d / %V\n", kind, data)
