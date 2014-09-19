@@ -47,6 +47,25 @@ const (
 )
 
 
+func (k MessageKind) String() string {
+	switch k {
+	case MessageKindAcceptRequest:
+		return "MessageKindAcceptRequest"
+	case MessageKindTicketRequest:
+		return "MessageKindTicketRequest"
+	case MessageKindUpdateRepositoryRequest:
+		return "MessageKindUpdateRepositoryRequest"
+	case MessageKindReloadProcTableRequest:
+		return "MessageKindReloadProcTableRequest"
+	case MessageKindUpdateProcTableRequest:
+		return "MessageKindUpdateProcTableRequest"
+	case MessageKindGetProcTableRequest:
+		return "MessageKindGetProcTableRequest"
+	default:
+		return fmt.Sprintf("%d", k)
+	}
+}
+
 // torigoya protocol
 // header 5 bytes
 // [header(1bytes)|length of data(uint, little endian 4bytes)|data(msgpacked)]
@@ -125,7 +144,7 @@ func (ph *ProtocolHandler) read(reader io.Reader) (MessageKind, interface{}, err
 	if uint32(len(ph.buffer)) < length {
 		ph.buffer = make([]byte, length)
 	}
-	n, err = io.ReadFull(reader, ph.buffer)
+	n, err = io.ReadFull(reader, ph.buffer[0:length])
 	if err != nil {
 		return MessageKindInvalid, nil, err
 	}
@@ -134,9 +153,9 @@ func (ph *ProtocolHandler) read(reader io.Reader) (MessageKind, interface{}, err
 	}
 
 	//
-	log.Printf("read:: kind: %d / length: %d, /value: %v\n", kind, length, ph.buffer)
+	log.Printf("read:: kind: %d / length: %d, /value: %v\n", kind, length, ph.buffer[0:length])
 	var data interface{}
-	dec := codec.NewDecoderBytes(ph.buffer[:], &msgPackHandler)
+	dec := codec.NewDecoderBytes(ph.buffer[0:length], &msgPackHandler)
 	if err := dec.Decode(&data); err != nil {
 		return MessageKindInvalid, nil, err
 	}

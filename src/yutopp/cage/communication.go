@@ -136,13 +136,14 @@ func acceptGreeting(
 	c.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	//
+	log.Printf("acceptGreeting\n")
 	kind, data, err := handler.read(c)
 	if err != nil {
 		e := errors.New(fmt.Sprintf("Reciever error at Greeting(%V)", err))
 		error_event <- e
 		return e
 	}
-	log.Printf("Server::Recieved: %d / %V\n", kind, data)
+	log.Printf("Server::Recieved: %s / %V\n", kind.String(), data)
 
 	// switch process by kind
 	switch kind {
@@ -196,7 +197,7 @@ func acceptRequestMessage(
 		error_event <- errors.New(fmt.Sprintf("Reciever error at acceptRequestMessage(%V)", err))
 		return
 	}
-	log.Printf("Server::Recieved: %d / %V\n", kind, data)
+	log.Printf("Server::Recieved: %s / %V\n", kind.String(), data)
 
 	// switch process by kind
 	switch kind {
