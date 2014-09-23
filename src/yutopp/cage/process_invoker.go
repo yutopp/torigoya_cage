@@ -21,6 +21,9 @@ import(
 
 
 //
+const ReadLength = 8096
+
+//
 type OutFd		int
 const (
 	StdoutFd = OutFd(0)
@@ -266,7 +269,7 @@ func readPipeAsync(
 	force_close_ch <-chan bool,
 	output_stream chan<-StreamOutput,
 ) {
-	buffer := make([]byte, 2048)
+	buffer := make([]byte, ReadLength)
 	defer close(cs)
 
 	force_close_f := false
@@ -318,7 +321,7 @@ func readPipeAsync(
 }
 
 func readPipe(fd int) (result []byte, err error) {
-	buffer := make([]byte, 2048)
+	buffer := make([]byte, ReadLength)
 
 	for {
 		size, err := syscall.Read(fd, buffer)
