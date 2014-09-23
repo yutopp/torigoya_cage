@@ -25,7 +25,7 @@ func (bm *ExecutedResult) sendTo(p *BridgePipes) error {
 
 	p.Result.CloseRead()
 
-	log.Printf("sendTo :: result => \n", buf)
+	// log.Printf("sendTo :: result => \n", buf)
 
 	n, err := syscall.Write(p.Result.WriteFd, buf)
 	if err != nil { return errors.New(fmt.Sprintf("sendTo:: %v", err))  }

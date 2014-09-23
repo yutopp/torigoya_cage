@@ -169,7 +169,7 @@ func (ph *ProtocolHandler) write(writer io.Writer, header MessageKind, data inte
 		return err
 	}
 
-	log.Printf("write::value: %v\n", buf)
+	//log.Printf("write::value: %v\n", buf)
 
 	n, err := writer.Write(buf)
 	if err != nil {
