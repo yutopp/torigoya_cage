@@ -32,15 +32,6 @@ int devno(int major, int minor)
     return makedev( major, minor );
 }
 
-int mount_proc()
-{
-	if (mount ("proc", "./proc", "proc", MS_RDONLY|MS_NOSUID|MS_NOEXEC|MS_NODEV, NULL) != 0) {
-		return -1;
-	}
-
-	return 0;
-}
-
 int lazy_umount(char const* path)
 {
 	return umount2(path, MNT_DETACH);
@@ -140,7 +131,7 @@ func buildChrootEnv(
 				local_mount_name,
 				"none",
 				syscall.MS_BIND | syscall.MS_RDONLY | syscall.MS_NOSUID | syscall.MS_NODEV,
-				"",
+				""/* means nil */,
 			); err != nil {
 				return errors.New(fmt.Sprintf("failed to mount %s (%s)", host_mount_name, err))
 			}
@@ -153,30 +144,15 @@ func buildChrootEnv(
 		if err := os.MkdirAll("proc", 0755); err != nil {
 			return errors.New(fmt.Sprintf("failed to mkdir proc (%s)", err))
 		}
-		if r := int(C.mount_proc()); r != 0 {
-			return errors.New(fmt.Sprintf("failed to mount proc (%d)", r))
-		}
-/*
-		if err := syscall.Mount(
-			"none",
-			"./proc",
-			"",
-			syscall.MS_SLAVE | syscall.MS_REC,
-			"",
-		); err != nil {
-			return errors.New(fmt.Sprintf("remount proc private (%s)", err))
-		}
-
 		if err := syscall.Mount(
 			"proc",
 			"./proc",
 			"proc",
-			syscall.MS_BIND | syscall.MS_RDONLY | syscall.MS_NOSUID | syscall.MS_NODEV,
-			"",
+			syscall.MS_RDONLY | syscall.MS_NOSUID | syscall.MS_NOEXEC | syscall.MS_NODEV,
+			""/* means nil */,
 		); err != nil {
-			return errors.New(fmt.Sprintf("failed to mount /proc -> ./proc (%s)", err))
+			return errors.New(fmt.Sprintf("failed to mount proc (%s)", err))
 		}
-*/
 
 		// mount /tmp
 		if err := os.MkdirAll("tmp", 0777); err != nil {
@@ -187,7 +163,7 @@ func buildChrootEnv(
 			"./tmp",
 			"tmpfs",
 			syscall.MS_NOEXEC | syscall.MS_NODEV,
-			"",
+			""/* means nil */,
 		); err != nil {
 			return errors.New(fmt.Sprintf("failed to mount /tmp -> ./tmp (%s)", err))
 		}
