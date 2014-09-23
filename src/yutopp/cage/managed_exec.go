@@ -33,7 +33,6 @@ type ResourceLimit struct {
 	FSize	uint64
 }
 
-
 //
 var errorSequence = []byte{ 0x0d, 0x0e, 0x0a, 0x0d }
 
@@ -89,22 +88,38 @@ func (bm *BridgeMessage) managedExec(
 
 		// parent process
 		wait_pid_chan := make(chan *os.ProcessState)
-		go func() {
+		go func(wait_pid_chan chan *os.ProcessState, process *os.Process) {
 			ps, _ := process.Wait()
 			wait_pid_chan <- ps
-		}()
+		}(wait_pid_chan, process)
+
+		//
+		pass_kill_chan := make(chan bool)
+		go func(pass_kill_chan chan bool, rl *ResourceLimit, pid int) {
+			select {
+			case <-pass_kill_chan:
+				/* DO NOTHING */
+				log.Println("PASS")
+
+			case <-time.After(time.Duration(rl.CPU + 5) * time.Second):
+				log.Printf("Kill a sleeping process(%d).\n", pid)
+				if err := syscall.Kill(pid, syscall.SIGKILL); err != nil {
+					log.Printf("Failed to kill a sleeping process(%d).\n", pid)
+				}
+			}
+		}(pass_kill_chan, rl, pid)
 
 		//
 		select {
 		case ps := <-wait_pid_chan:
-			// take status
+			close(pass_kill_chan)
 
-			//
+			// take status
 			usage, ok := ps.SysUsage().(*syscall.Rusage)
 			if !ok {
 				return nil, errors.New("failed to cast to *syscall.Rusage")
 			}
-			fmt.Printf("Usage %v\n", usage)
+			log.Printf("Usage %v\n", usage)
 
 			// error check sequence
 			error_buf := make([]byte, 128)
@@ -134,15 +149,6 @@ func (bm *BridgeMessage) managedExec(
 				// exit status
 				return_code := wait_status.ExitStatus()
 
-				// take status
-				status := func() ExecutedStatus {
-					if ps.Success() {
-						return Passed
-					} else {
-						return Error
-					}
-				}()
-
 				// CPU time
 				user_time := usage.Utime
 				system_time := usage.Stime
@@ -153,6 +159,24 @@ func (bm *BridgeMessage) managedExec(
 				// usage.Maxrss -> Amount of memory usage (KB)
 				// TODO: fix it
 				memory := uint64(usage.Maxrss * 1024)
+
+				// take status
+				status := func() ExecutedStatus {
+					if signal != nil {
+						if *signal == syscall.SIGXCPU {
+							return CPULimit
+						}
+					}
+					if cpu_time > float32(rl.CPU) {
+						return CPULimit
+					}
+
+					if ps.Success() {
+						return Passed
+					} else {
+						return Error
+					}
+				}()
 
 				// make result
 				return &ExecutedResult{
@@ -185,9 +209,9 @@ func (bm *BridgeMessage) managedExec(
 				}
 			}
 
-		case <-time.After(time.Duration(rl.CPU * 2 + 20) * time.Second):
-			// timeout(e.g. when process uses sleep a lot)
-			return nil, errors.New("TLE")
+		case <-time.After(time.Duration(rl.CPU * 2 + 10) * time.Second):
+			// unexpected timeout
+			return nil, errors.New("Unexpected TLE...")
 		}
 	}
 }
@@ -227,6 +251,7 @@ func (bm *BridgeMessage) managedExecChild(
 	}
 	// !!! ===================
 
+
 	log.Printf("==================================================\n")
 	out, err := exec.Command("/bin/ps", "aux").Output()
 	if err != nil {
@@ -257,19 +282,14 @@ func (bm *BridgeMessage) managedExecChild(
 	log.Printf("== Managed: memory(byte)    (%v)\n", rl.AS)
 	log.Printf("== Managed: fsize           (%v)\n", rl.FSize)
 
-	//
+	// limit(1/2)
  	setLimit(C.RLIMIT_CORE, 0)			// Process can NOT create CORE file
  	setLimit(C.RLIMIT_NOFILE, 512)		// Process can open 512 files
 	setLimit(C.RLIMIT_NPROC, 30)		// Process can create processes to 30
  	setLimit(C.RLIMIT_MEMLOCK, 1024)	// Process can lock 1024 Bytes by mlock(2)
-//
- 	setLimit(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)
- 	setLimit(C.RLIMIT_AS, rl.AS)		// Memory can be used only memory_limit_bytes [be careful!]
- 	setLimit(C.RLIMIT_FSIZE, rl.FSize)	// Process can writes a file only FSize Bytes
 
 	//
 	syscall.Umask(umask)
-
 
 	// set PATH env
 	if path, ok := envs["PATH"]; ok {
@@ -320,6 +340,11 @@ func (bm *BridgeMessage) managedExecChild(
 	if err := syscall.Dup2(bm.Pipes.Stderr.WriteFd, 2); err != nil { panic(err) }
 	if err := bm.Pipes.Stderr.CloseWrite(); err != nil { panic(err) }
 
+	// limit(2/2)
+	setLimitWithMarginSec(C.RLIMIT_CPU, rl.CPU)		// CPU can be used only cpu_limit_time(sec)
+ 	setLimit(C.RLIMIT_AS, rl.AS)					// Memory can be used only memory_limit_bytes [be careful!]
+ 	setLimit(C.RLIMIT_FSIZE, rl.FSize)				// Process can writes a file only FSize Bytes
+
 	// ==========
 	// exec!!
 	err = syscall.Exec(exec_path, args, env_list);
@@ -343,4 +368,14 @@ func setLimit(resource int, value uint64) {
 	if err := syscall.Setrlimit(resource, &syscall.Rlimit{value, value}); err != nil {
 		panic(err)
 	}
+}
+
+func setLimitSoftHard(resource int, solf_value uint64, hard_value uint64) {
+	if err := syscall.Setrlimit(resource, &syscall.Rlimit{solf_value, hard_value}); err != nil {
+		panic(err)
+	}
+}
+
+func setLimitWithMarginSec(resource int, value uint64) {
+	setLimitSoftHard(resource, value + 1, value + 2)
 }
