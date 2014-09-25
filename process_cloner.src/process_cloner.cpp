@@ -46,7 +46,11 @@ int fork_shell( void* /* unused */ )
     //
     char* const callback_executable_r = getenv( "callback_executable" );
     char* const packed_torigoya_content_r = getenv( "packed_torigoya_content" );
-    if ( callback_executable_r == nullptr || packed_torigoya_content_r == nullptr ) {
+    char* const debug_tag_r = getenv( "debug_tag" );
+    if ( callback_executable_r == nullptr
+         || packed_torigoya_content_r == nullptr
+         || debug_tag_r == nullptr
+        ) {
         std::cerr << "A number of parameters is not enough." << std::endl;
         return -1;
     }
@@ -62,9 +66,10 @@ int fork_shell( void* /* unused */ )
         nullptr
     };
 
-    static auto const envs_num = 1;
+    static auto const envs_num = 2;
     std::array<std::pair<std::string, char const* const>, envs_num> envs = {
-        std::make_pair( "packed_torigoya_content=", packed_torigoya_content_r )
+        std::make_pair( "packed_torigoya_content=", packed_torigoya_content_r ),
+        std::make_pair( "debug_tag=", debug_tag_r )
     };
 
     char *exenvp[envs_num+1] = {};

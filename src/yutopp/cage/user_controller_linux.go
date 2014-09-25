@@ -23,6 +23,7 @@ import(
 
 func CreateUser(user_name string) (int, int, error) {
 	println("==> " + user_name)
+
 	// create user
 	user_craete_command := exec.Command("useradd", "--no-create-home", user_name)
 	if err := user_craete_command.Run(); err != nil {

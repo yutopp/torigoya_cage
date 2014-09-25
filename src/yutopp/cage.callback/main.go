@@ -10,14 +10,16 @@ package main
 
 import (
 	"os"
+	"fmt"
 
 	"yutopp/cage"
 )
 
 func main() {
-	println("======== cage.callback booted")
-
 	packed_torigoya_content := os.Getenv("packed_torigoya_content")
+	debug_tag := os.Getenv("debug_tag")
+
+	fmt.Printf("= > ====== cage.callback booted: %s\n", debug_tag)
 
 	if packed_torigoya_content == "" {
 		panic("arguments are invalid")
@@ -35,5 +37,5 @@ func main() {
 		panic(err)
 	}
 
-	println("======== cage.callback finished")
+	fmt.Printf("= < ====== cage.callback finished: %s\n", debug_tag)
 }

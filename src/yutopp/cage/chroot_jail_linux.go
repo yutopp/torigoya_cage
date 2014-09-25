@@ -116,7 +116,7 @@ func buildChrootEnv(
 		// mount system's
 		for _, host_mount_name := range readOnlyMounts {
 			if !fileExists(host_mount_name) {
-				log.Printf("NOT mounted: system dir %s is not existed on host machine\n", host_mount_name)
+				// log.Printf("NOT mounted: system dir %s is not existed on host machine\n", host_mount_name)
 				continue
 			}
 
@@ -136,7 +136,7 @@ func buildChrootEnv(
 				return errors.New(fmt.Sprintf("failed to mount %s (%s)", host_mount_name, err))
 			}
 
-			log.Printf("mounted: %s\n", host_mount_name)
+			// log.Printf("mounted: %s\n", host_mount_name)
 		}
 
 
@@ -289,7 +289,7 @@ func umountJailedDir(base_dir string, mount string) error {
 		}
 
 	} else {
-		log.Printf("NOT unmounted: system dir %s is not existed on sandbox env\n", target_dir)
+		// log.Printf("NOT unmounted: system dir %s is not existed on sandbox env\n", target_dir)
 	}
 
 	return nil
@@ -299,7 +299,7 @@ func umount(dir_name string) error {
 	cs := C.CString(dir_name)
 	defer C.free(unsafe.Pointer(cs))
 
-	log.Printf("= TRY TO UNMOUNT >> %s\n", dir_name)
+	// log.Printf("= TRY TO UNMOUNT >> %s\n", dir_name)
 	if ret := int(C.lazy_umount(cs)); ret != 0 {
 		e := errors.New(fmt.Sprintf("Failed to umount: %s | err: %d", dir_name, ret))
 

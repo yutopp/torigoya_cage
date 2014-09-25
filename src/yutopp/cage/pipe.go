@@ -22,10 +22,6 @@ type Pipe struct {
 	readClosed, writeClosed		bool
 }
 
-func (p *Pipe) CopyForClone() *Pipe {
-	return &Pipe{p.ReadFd, p.WriteFd, false, false}
-}
-
 func (p *Pipe) Close() error {
 	if err := p.CloseRead(); err != nil { return err }
 	return p.CloseWrite()

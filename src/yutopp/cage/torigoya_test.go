@@ -416,7 +416,7 @@ int main() {
 }
 
 
-func TestTicketBasicParallel(t *testing.T) {
+func TestTicketBasicParallel1(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
 	if err != nil {
@@ -425,14 +425,21 @@ func TestTicketBasicParallel(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 16; i++ {
+	const num = 5
+	var fx [num]bool
+	for i := 0; i < num; i++ {
 		wg.Add(1)
 
 		go func(no int) {
-			defer wg.Done()
+			defer func() {
+				fmt.Printf("Done! %d\n", no)
+				fx[no] = true
+				fmt.Printf("fs! %v\n", fx)
+				wg.Done()
+			}()
 
 			//
-			base_name := "aaa7" + strconv.FormatInt(time.Now().Unix(), 10) + strconv.Itoa(no)
+			base_name := "paralell1_no_" + strconv.Itoa(no) + "_" + strconv.FormatInt(time.Now().Unix(), 10)
 
 			//
 			sources := []*SourceData{
@@ -508,7 +515,135 @@ int main() {
 				return
 			}
 
-			t.Logf("%V", result)
+			//
+			expect_result := test_result{
+				compile: test_result_unit{
+				},
+				link: test_result_unit{
+				},
+				run: map[int]*test_result_unit{
+					0: &test_result_unit{
+						out: []byte("hello!\ninput is 0\n"),
+					},
+					1: &test_result_unit{
+						out: []byte("hello!\ninput is 100\n"),
+					},
+				},
+			}
+
+			//
+			t.Logf("%d =====\n", no)
+			t.Logf("%V\n", result)
+			assertTestResult(t, &result, &expect_result)
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+
+func TestTicketBasicParallel2(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	var wg sync.WaitGroup
+	const num = 30
+	var fx [num]bool
+	for i := 0; i < num; i++ {
+		wg.Add(1)
+
+		go func(no int) {
+			defer func() {
+				fmt.Printf("Done! %d\n", no)
+				fx[no] = true
+				fmt.Printf("fs! %v\n", fx)
+				wg.Done()
+			}()
+
+			//
+			base_name := "paralell2_no_" + strconv.Itoa(no) + "_" + strconv.FormatInt(time.Now().Unix(), 10)
+
+			//
+			sources := []*SourceData{
+				&SourceData{
+					"prog.cpp",
+					[]byte(`
+#include <iostream>
+#include <unistd.h>
+
+int main() {
+	std::cout << "hello!" << std::endl;
+	int i;
+	std::cin >> i;
+	usleep(200000); // 0.2 sec
+	std::cout << "input is " << i << std::endl;
+}
+`),
+					false,
+				},
+			}
+
+			//
+			build_inst := &BuildInstruction{
+				CompileSetting: &ExecutionSetting{
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+				LinkSetting: &ExecutionSetting{
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			}
+
+			//
+			run_inst := &RunInstruction{
+				Inputs: []Input{
+					Input{
+						stdin: nil,
+						setting: &ExecutionSetting{
+							CpuTimeLimit: 10,
+							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+						},
+					},
+
+					Input{
+						stdin: &SourceData{
+							"hoge.in",
+							[]byte("100"),
+							false,
+						},
+						setting: &ExecutionSetting{
+							CpuTimeLimit: 10,
+							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+						},
+					},
+				},
+			}
+
+			//
+			ticket := &Ticket{
+				BaseName: base_name,
+				ProcId: 0,
+				ProcVersion: "test",
+				Sources: sources,
+				BuildInst: build_inst,
+				RunInst: run_inst,
+			}
+
+			// execute
+			var result test_result
+			result.run = make(map[int]*test_result_unit)
+			f := makeHelperCallback(&result)
+			if err := ctx.ExecTicket(ticket, f); err != nil {
+				t.Errorf(err.Error())
+				return
+			}
+
+
 
 			//
 			expect_result := test_result{
@@ -527,6 +662,8 @@ int main() {
 			}
 
 			//
+			t.Logf("%d =====\n", no)
+			t.Logf("%V\n", result)
 			assertTestResult(t, &result, &expect_result)
 		}(i)
 	}
@@ -807,6 +944,99 @@ int main() {
 			0: &test_result_unit{
 				result: &ExecutedResult {
 					Status: Error,
+				},
+			},
+		},
+	}
+
+	//
+	assertTestResult(t, &result, &expect_result)
+}
+
+
+
+func TestTicketMLE(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	base_name := "mle" + strconv.FormatInt(time.Now().Unix(), 10)
+
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
+#include <iostream>
+
+int main() {
+
+}
+`),
+			false,
+		},
+	}
+
+	//
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			CpuTimeLimit: 3,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			CpuTimeLimit: 3,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+	}
+
+	//
+	run_inst := &RunInstruction{
+		Inputs: []Input{
+			Input{
+				stdin: nil,
+				setting: &ExecutionSetting{
+					CpuTimeLimit: 1,
+					MemoryBytesLimit: 3 * 1024 * 1024,
+				},
+			},
+		},
+	}
+
+	//
+	ticket := &Ticket{
+		BaseName: base_name,
+		ProcId: 0,
+		ProcVersion: "test",
+		Sources: sources,
+		BuildInst: build_inst,
+		RunInst: run_inst,
+	}
+
+	// execute
+	var result test_result
+	result.run = make(map[int]*test_result_unit)
+	f := makeHelperCallback(&result)
+	if err := ctx.ExecTicket(ticket, f); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	t.Logf("%V", result)
+
+	//
+	expect_result := test_result{
+		compile: test_result_unit{
+		},
+		link: test_result_unit{
+		},
+		run: map[int]*test_result_unit{
+			0: &test_result_unit{
+				result: &ExecutedResult {
+					Status: CPULimit,
 				},
 			},
 		},

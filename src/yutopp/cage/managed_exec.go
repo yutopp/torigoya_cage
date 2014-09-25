@@ -22,6 +22,7 @@ import(
 	"os"
 	"os/exec"
 	"syscall"
+	"runtime"
 	"log"
 )
 
@@ -70,15 +71,13 @@ func (bm *BridgeMessage) managedExec(
 
 		//
 		defer func() {
-			syscall.Close(bm.Pipes.Stdout.WriteFd)
-			syscall.Close(bm.Pipes.Stderr.WriteFd)
-
-			//
 			umountJail(bm.ChrootPath);
 		}()
 
 		//
-		syscall.Close(error_pipe.WriteFd)
+		bm.Pipes.Stdout.Close()
+		bm.Pipes.Stderr.Close()
+		error_pipe.CloseWrite()
 
 		//
 		process, err := os.FindProcess(pid)
@@ -269,7 +268,7 @@ func (bm *BridgeMessage) managedExecChild(
 	}
 
 	log.Printf("==================================================\n")
-	out, err = exec.Command("/bin/ls", "-laR", "/home/torigoya").Output()
+	out, err = exec.Command("/bin/ls", "-laR", "/home").Output()
 	if err != nil {
 		log.Printf("error:: %s\n", err.Error())
 	} else {
@@ -354,9 +353,12 @@ func (bm *BridgeMessage) managedExecChild(
 
 
 func fork() (int, error) {
+	runtime.LockOSThread()
 	syscall.ForkLock.Lock()
 	pid, _, err := syscall.Syscall(syscall.SYS_FORK, 0, 0, 0)
 	syscall.ForkLock.Unlock()
+	runtime.UnlockOSThread()
+
 	if err != 0 {
 		return -1, err
 	}

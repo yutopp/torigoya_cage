@@ -43,6 +43,11 @@ func (ctx *Context) ExecTicket(
 	ticket				*Ticket,
 	callback			invokeResultRecieverCallback,
 ) error {
+	log.Printf("$$$$$$$$$$ START ticket => %s\n", ticket.BaseName)
+	defer func() {
+		log.Printf("$$$$$$$$$$ FINISH ticket  => %s\n", ticket.BaseName)
+	}()
+
 	// lookup language proc profile
 	proc_profile, err := ctx.procConfTable.Find(ticket.ProcId, ticket.ProcVersion)
 	if err != nil {
@@ -63,9 +68,9 @@ func (ctx *Context) ExecTicket(
 	if errs := ctx.execManagedRun(proc_profile,	ticket.BaseName, ticket.Sources, ticket.RunInst, callback); errs != nil {
 		// TODO: proess error
 		for err := range errs {
-			fmt.Printf("??? %v\n", err)
+			log.Printf("exec error %v\n", err)
 		}
-		return errors.New("ababa")
+		return errors.New("Failed to exec inputs")
 	}
 
 	return nil
@@ -84,6 +89,11 @@ func (ctx *Context) execManagedBuild(
 	user_dir_path := ctx.makeUserDirName(base_name)
 	user_home_path := ctx.jailedUserDir
 	bin_base_path := filepath.Join(ctx.basePath, "bin")
+
+	log.Printf("$$$$$$$$$$ START build => %s\n", base_name)
+	defer func() {
+		log.Printf("$$$$$$$$$$ FINISH build  => %s\n", base_name)
+	}()
 
 	//
 	if proc_profile.IsBuildRequired {
@@ -137,6 +147,11 @@ func (ctx *Context) execManagedRun(
 	callback			invokeResultRecieverCallback,
 ) []error {
 	log.Println(">> called invokeRunCommand")
+
+	log.Printf("$$$$$$$$$$ START run => %s\n", base_name)
+	defer func() {
+		log.Printf("$$$$$$$$$$ FINISH run  => %s\n", base_name)
+	}()
 
 	//
 	user_dir_path := ctx.makeUserDirName(base_name)
@@ -222,14 +237,15 @@ func (ctx *Context) invokeCompileCommand(
 	}
 
 	//
-	build_output_stream := make(chan StreamOutput)
-	go sendOutputToCallback(callback, build_output_stream, CompileMode, 0)
+	build_output_stream := make(chan *StreamOutput)
+	closed_ch := make(chan bool)
+	go sendOutputToCallback(callback, build_output_stream, CompileMode, 0, closed_ch)
 
 	//
-	result, err := message.invokeProcessCloner(bin_base_path, build_output_stream)
+	result, err := message.invokeProcessCloner(bin_base_path, build_output_stream, base_name)
 
 	//
-	close(build_output_stream)
+	<-closed_ch
 	if err != nil { return err }
 	sendResultToCallback(callback, result, CompileMode, 0)
 
@@ -273,14 +289,15 @@ func (ctx *Context) invokeLinkCommand(
 	}
 
 	//
-	link_output_stream := make(chan StreamOutput)
-	go sendOutputToCallback(callback, link_output_stream, LinkMode, 0)
+	link_output_stream := make(chan *StreamOutput)
+	closed_ch := make(chan bool)
+	go sendOutputToCallback(callback, link_output_stream, LinkMode, 0, closed_ch)
 
 	//
-	result, err := message.invokeProcessCloner(bin_base_path, link_output_stream)
+	result, err := message.invokeProcessCloner(bin_base_path, link_output_stream, base_name)
 
 	//
-	close(link_output_stream)
+	<-closed_ch
 	if err != nil { return err }
 	sendResultToCallback(callback, result, LinkMode, 0)
 
@@ -359,14 +376,15 @@ func (ctx *Context) invokeRunCommand(
 	}
 
 	//
-	run_output_stream := make(chan StreamOutput)
-	go sendOutputToCallback(callback, run_output_stream, RunMode, index)
+	run_output_stream := make(chan *StreamOutput)
+	closed_ch := make(chan bool)
+	go sendOutputToCallback(callback, run_output_stream, RunMode, index, closed_ch)
 
 	//
-	result, err := message.invokeProcessCloner(bin_base_path, run_output_stream)
+	result, err := message.invokeProcessCloner(bin_base_path, run_output_stream, base_name)
 
 	//
-	close(run_output_stream)
+	<-closed_ch
 	if err != nil { return err }
 	sendResultToCallback(callback, result, RunMode, index)
 
@@ -441,16 +459,31 @@ type invokeResultRecieverCallback		func(interface{})
 //
 func sendOutputToCallback(
 	callback			invokeResultRecieverCallback,
-	output_stream		chan StreamOutput,
+	output_stream		chan *StreamOutput,
 	mode				int,
 	index				int,
+	closed_ch			chan bool,
 ) {
+	nil_count := 0
+
 	for out := range output_stream {
-		if callback != nil {
+		if out == nil {
+			nil_count = nil_count + 1
+		}
+
+		// nil is sent when output becomes empty
+		// 2 = stdout + stderr
+		if nil_count >= 2 {
+			close(output_stream)
+			closed_ch <- true
+			break
+		}
+
+		if out != nil && callback != nil {
 			callback(&StreamOutputResult{
 				Mode: mode,
 				Index: index,
-				Output: &out,
+				Output: out,
 			})
 		}
 	}

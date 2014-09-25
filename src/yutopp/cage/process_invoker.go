@@ -12,6 +12,8 @@ package torigoya
 
 import(
 	"log"
+	"fmt"
+
 	"time"
 	"errors"
 	"os"
@@ -41,11 +43,12 @@ func (s *StreamOutput) ToTuple() []interface{} {
 //
 func (bm *BridgeMessage) invokeProcessCloner(
 	cloner_dir		string,
-	output_stream	chan<-StreamOutput,
+	output_stream	chan<-*StreamOutput,
+	debug_tag		string,
 ) (*ExecutedResult, error) {
 	log.Println(">> called invokeProcessCloner")
 
-	return invokeProcessClonerBase(cloner_dir, "process_cloner", bm, output_stream)
+	return invokeProcessClonerBase(cloner_dir, "process_cloner", bm, output_stream, debug_tag)
 }
 
 
@@ -53,20 +56,24 @@ func invokeProcessClonerBaseChild(
 	cloner_dir		string,
 	cloner_name		string,
 	bm				*BridgeMessage,
-	output_stream	chan<-StreamOutput,
+	output_stream	chan<-*StreamOutput,
+	debug_tag		string,
 ) (*ExecutedResult, error) {
 	cloner_path := filepath.Join(cloner_dir, cloner_name)
-	log.Printf("Cloner path: %s", cloner_path)
+	log.Printf("%s: Cloner path: %s", debug_tag, cloner_path)
 
 	//
 	new_stdout, err := bm.Pipes.Stdout.Dup()
 	if err != nil { return nil, err }
+	if err := bm.Pipes.Stdout.Close(); err != nil { return nil, err }
 
 	new_stderr, err := bm.Pipes.Stderr.Dup()
 	if err != nil { return nil, err }
+	if err := bm.Pipes.Stderr.Close(); err != nil { return nil, err }
 
 	new_result, err := bm.Pipes.Result.Dup()
 	if err != nil { return nil, err }
+	if err := bm.Pipes.Result.Close(); err != nil { return nil, err }
 
 	//
 	bm.Pipes = &BridgePipes{
@@ -85,6 +92,7 @@ func invokeProcessClonerBaseChild(
 	envs := []string{
 		"callback_executable=" + callback_path,
 		"packed_torigoya_content=" + content_string,
+		"debug_tag=" + debug_tag,
 	}
 
 	//
@@ -98,6 +106,7 @@ func invokeProcessClonerBaseChild(
 		log.Printf("Error!!! %v", err)
 	}
 
+	// unreachable
 	return nil, nil
 }
 
@@ -106,7 +115,8 @@ func invokeProcessClonerBase(
 	cloner_dir		string,
 	cloner_name		string,
 	bm				*BridgeMessage,
-	output_stream	chan<-StreamOutput,
+	output_stream	chan<-*StreamOutput,
+	debug_tag		string,
 ) (*ExecutedResult, error) {
 	// pipe for
 	stdout_pipe, err := makePipeNonBlockingWithFlags(syscall.O_CLOEXEC)
@@ -134,18 +144,21 @@ func invokeProcessClonerBase(
 
 	// fork process!
 	pid, err := fork()
+	fmt.Printf("@@@@@@@@ after fork(pid): %s\n", pid, debug_tag)
 	if err != nil {
-		return nil, err;
+		return nil, err
 	}
 	if pid == 0 {
 		// child process
-		invokeProcessClonerBaseChild(cloner_dir, cloner_name, bm, output_stream)
+		invokeProcessClonerBaseChild(cloner_dir, cloner_name, bm, output_stream, debug_tag)
 
 		// unreachable
 		os.Exit(-1);
 		return nil, nil
 
 	} else {
+		fmt.Printf("?? $ ?? fork: %s\n", debug_tag)
+
 		// parent process
 		process, err := os.FindProcess(pid)
 		if err != nil {
@@ -161,6 +174,7 @@ func invokeProcessClonerBase(
 		wait_pid_chan := make(chan *os.ProcessState)
 		go func() {
 			ps, _ := process.Wait()
+			fmt.Printf("?? $ ?? FOUND: %s\n", debug_tag)
 			wait_pid_chan <- ps
 		}()
 
@@ -177,28 +191,48 @@ func invokeProcessClonerBase(
 
 		//
 		defer func() {
-			log.Printf("wait for closeing wait_pid_chan => %v\n", force_quit)
+			log.Printf("%s: wait for closeing wait_pid_chan => %v\n", debug_tag, force_quit)
 			close(wait_pid_chan)
 
-			force_close_out <- true
-			force_close_err <- true
+			if force_quit {
+				//force_close_out <- true
+				//force_close_err <- true
+			}
 
 			// block
-			log.Printf("wait for recieving stdout_err\n")
-			if err := <-stdout_err; err != nil {
-				log.Printf("??STDOUT ERROR: %v\n", err)
+
+			// out
+			log.Printf("%s: wait for recieving stdout_err\n", debug_tag)
+			select {
+			case err := <-stdout_err:
+				if err != nil {
+					log.Printf("??STDOUT ERROR: %v\n", err)
+				}
+
+			default:
+				// not finished...
+				force_close_out <- true
 			}
-			log.Printf("wait for closeing stdout_err\n")
+			log.Printf("%s: wait for closeing stdout_err\n", debug_tag)
 			close(force_close_out)
 
-			log.Printf("wait for recieving stderr_err\n")
-			if err := <-stderr_err; err != nil {
-				log.Printf("??STDERR ERROR: %v\n", err)
+			// err
+			log.Printf("%s: wait for recieving stderr_err\n", debug_tag)
+			select {
+			case err := <-stderr_err:
+				if err != nil {
+					log.Printf("??STDERR ERROR: %v\n", err)
+				}
+
+			default:
+				// not finished...
+				force_close_err <- true
 			}
-			log.Printf("wait for closeing stderr_err\n")
+			log.Printf("%s: wait for closeing stderr_err\n", debug_tag)
 			close(force_close_err)
 
-			log.Printf("closed!\n")
+			//
+			log.Printf("%s: closed!\n", debug_tag)
 		}()
 
 		// wait for finishing subprocess
@@ -211,7 +245,6 @@ func invokeProcessClonerBase(
 				return nil, errors.New("Process finished with failed state")
 			}
 
-
 			result_buf_ch := make(chan []byte)
 			result_err_ch := make(chan error)
 			go func() {
@@ -222,8 +255,9 @@ func invokeProcessClonerBase(
 					return
 				}
 
-				log.Printf("got a result...\n")
+				log.Printf("getting a result...\n")
 				result_buf_ch <- result_buf
+				log.Printf("got a result...\n")
 			}()
 
 			select {
@@ -253,10 +287,10 @@ func invokeProcessClonerBase(
 				return nil, errors.New("Timeout, failed to get a result...")
 			}
 
-		case <-time.After(500 * time.Second):
+		case <-time.After(30 * time.Second):
 			// TODO: fix
 			// will blocking( wait for response at least 500 seconds )
-			log.Println("TIMEOUT")
+			log.Printf("%s: TIMEOUT\n", debug_tag)
 			return nil, errors.New("Process timeouted")
 		}
 	} // if pid
@@ -267,57 +301,51 @@ func readPipeAsync(
 	cs chan<-error,
 	output_fd OutFd,
 	force_close_ch <-chan bool,
-	output_stream chan<-StreamOutput,
+	output_stream chan<-*StreamOutput,
 ) {
 	buffer := make([]byte, ReadLength)
-	defer close(cs)
-
 	force_close_f := false
 
 	for {
 		select {
-		case f := <-force_close_ch:
-			force_close_f = f
+		case <-force_close_ch:
+			force_close_f = true
 		default:
 		}
 
 		size, err := syscall.Read(fd, buffer)
-		//log.Printf("=================== %v / = %v", size, err)
 		if err != nil {
-			if err != syscall.EAGAIN {
-				cs <- err
+			if err == syscall.EAGAIN {
+				continue
+			} else {
+				if ! force_close_f {
+					cs <- err
+				}
+
+				output_stream <- nil
 				return
 			}
 		}
+		if size <= 0 && force_close_f {
+			output_stream <- nil
+			return
+		}
 
-		if size <= 0 {
-			// not error, there is no data to read
-			if force_close_f {
-				cs <- nil
-				return
-			}
-
-		} else {
-			//log.Printf("= %d ==> %d", fd, size)
-			//log.Printf("= %d ==>\n%s\n<=====\n", fd, string(buffer[:size]))
-
-			//
+		if size > 0 {
 			copied := make([]byte, size)
 			copy(copied, buffer[:size])
 
-			//
-			output_stream <- StreamOutput{
+			output_stream <- &StreamOutput{
 				Fd: output_fd,
 				Buffer: copied,
 			}
 		}
 
 		//
-		time.Sleep(1 * time.Millisecond)
+		// time.Sleep(1 * time.Millisecond)
 	}
 
-
-	cs <- nil
+	// cs <- nil
 }
 
 func readPipe(fd int) (result []byte, err error) {

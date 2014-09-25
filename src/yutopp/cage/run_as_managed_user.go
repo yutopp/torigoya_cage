@@ -41,7 +41,7 @@ func runAsManagedUser(
 		return err
 	}
 	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, os.Kill, syscall.SIGKILL, syscall.SIGINT, syscall.SIGHUP)
+	signal.Notify(sig, os.Kill, syscall.SIGKILL, syscall.SIGINT, syscall.SIGHUP, syscall.SIGTERM)
 	defer func() {
 		if err := recover(); err != nil {
             log.Printf("recoverd in runAsManagedUser: %v\n", err)

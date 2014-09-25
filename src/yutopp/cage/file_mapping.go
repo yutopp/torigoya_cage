@@ -137,8 +137,8 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 	if err := os.Mkdir(user_home_base_path, os.ModeDir); err != nil {
 		return nil, errors.New(fmt.Sprintf("Couldn't create directory %s (%s)", user_home_base_path, err))
 	}
-	// host_user_id:managed_group_id // r-x/---/---
-	if err := guardPath(user_home_base_path, host_user_id, managed_group_id, 0500); err != nil {
+	// host_user_id:managed_group_id // r-x/r-x/---
+	if err := guardPath(user_home_base_path, host_user_id, managed_group_id, 0550); err != nil {
 		return nil, err
 	}
 

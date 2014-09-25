@@ -12,6 +12,7 @@ fi
 echo $ext
 
 echo "Torigoya test: run unittest..."
-sudo GOPATH=`pwd` go test -v yutopp/cage -cpuprofile cpu.pprof -memprofile mem.pprof $ext \
-    && go tool pprof --text bin/cage cpu.pprof > cpu.txt \
-    && go tool pprof --text bin/cage mem.pprof > mem.txt
+sudo GOPATH=`pwd` go test -v yutopp/cage $ext
+#sudo GOPATH=`pwd` go test -v yutopp/cage -cpuprofile cpu.pprof -memprofile mem.pprof $ext \
+#    && go tool pprof --text bin/cage cpu.pprof > cpu.txt \
+#    && go tool pprof --text bin/cage mem.pprof > mem.txt
