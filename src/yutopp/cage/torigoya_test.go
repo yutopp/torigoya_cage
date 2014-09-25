@@ -425,7 +425,7 @@ func TestTicketBasicParallel1(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	const num = 5
+	const num = 16
 	var fx [num]bool
 	for i := 0; i < num; i++ {
 		wg.Add(1)
@@ -509,8 +509,10 @@ int main() {
 			// execute
 			var result test_result
 			result.run = make(map[int]*test_result_unit)
+
 			f := makeHelperCallback(&result)
 			if err := ctx.ExecTicket(ticket, f); err != nil {
+				t.Logf("%d =====\n", no)
 				t.Errorf(err.Error())
 				return
 			}
@@ -639,11 +641,10 @@ int main() {
 			result.run = make(map[int]*test_result_unit)
 			f := makeHelperCallback(&result)
 			if err := ctx.ExecTicket(ticket, f); err != nil {
+				t.Logf("%d =====\n", no)
 				t.Errorf(err.Error())
 				return
 			}
-
-
 
 			//
 			expect_result := test_result{
@@ -954,7 +955,7 @@ int main() {
 }
 
 
-
+/*
 func TestTicketMLE(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
@@ -1045,7 +1046,7 @@ int main() {
 	//
 	assertTestResult(t, &result, &expect_result)
 }
-
+*/
 
 
 func TestTicketRepeat(t *testing.T) {
@@ -1161,7 +1162,7 @@ func assertTestResult(t *testing.T, result, expect *test_result) {
 			}
 
 		} else {
-			t.Logf("[SKIPPED: %s / result]", tag)
+			// t.Logf("[SKIPPED: %s / result]", tag)
 		}
 
 		if expect.out != nil {
@@ -1173,7 +1174,7 @@ func assertTestResult(t *testing.T, result, expect *test_result) {
 			}
 
 		} else {
-			t.Logf("[SKIPPED: %s / out]", tag)
+			// t.Logf("[SKIPPED: %s / out]", tag)
 		}
 
 		if expect.err != nil {
@@ -1185,7 +1186,7 @@ func assertTestResult(t *testing.T, result, expect *test_result) {
 			}
 
 		} else {
-			t.Logf("[SKIPPED: %s / err]", tag)
+			// t.Logf("[SKIPPED: %s / err]", tag)
 		}
 	}
 

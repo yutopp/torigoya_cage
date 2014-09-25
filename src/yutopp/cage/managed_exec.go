@@ -53,6 +53,17 @@ func (bm *BridgeMessage) managedExec(
 
 	log.Printf(">> managedExec start\n")
 
+	//
+	if err := bm.Pipes.Stdout.ToCloseOnExec(); err != nil {
+		return nil, err
+	}
+	if err := bm.Pipes.Stderr.ToCloseOnExec(); err != nil {
+		return nil, err
+	}
+	if err := bm.Pipes.Result.ToCloseOnExec(); err != nil {
+		return nil, err
+	}
+
 	// fork process!
 	pid, err := fork()
 	if err != nil {
@@ -77,6 +88,7 @@ func (bm *BridgeMessage) managedExec(
 		//
 		bm.Pipes.Stdout.Close()
 		bm.Pipes.Stderr.Close()
+		bm.Pipes.Result.CloseRead()
 		error_pipe.CloseWrite()
 
 		//

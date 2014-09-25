@@ -11,6 +11,7 @@
 package torigoya
 
 import(
+	"fmt"
 	"syscall"
 	"errors"
 )
@@ -59,6 +60,22 @@ func (p *Pipe) Dup() (*Pipe, error) {
 	}
 
 	return &Pipe{new_readfd, new_writefd, p.readClosed, p.writeClosed}, nil
+}
+
+func (p *Pipe) ToCloseOnExec() (error) {
+	if ! p.readClosed {
+		if _, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(p.ReadFd), syscall.F_SETFD, syscall.FD_CLOEXEC); errno != 0 {
+			return errors.New(fmt.Sprintf("Failed ToCloseOnExec(Read): %d", errno))
+		}
+	}
+
+	if ! p.writeClosed {
+		if _, _, errno := syscall.RawSyscall(syscall.SYS_FCNTL, uintptr(p.WriteFd), syscall.F_SETFD, syscall.FD_CLOEXEC); errno != 0 {
+			return errors.New(fmt.Sprintf("Failed ToCloseOnExec(Write): %d", errno))
+		}
+	}
+
+	return nil
 }
 
 // ================================================================================

@@ -44,9 +44,7 @@ func (ctx *Context) ExecTicket(
 	callback			invokeResultRecieverCallback,
 ) error {
 	log.Printf("$$$$$$$$$$ START ticket => %s\n", ticket.BaseName)
-	defer func() {
-		log.Printf("$$$$$$$$$$ FINISH ticket  => %s\n", ticket.BaseName)
-	}()
+	defer log.Printf("$$$$$$$$$$ FINISH ticket  => %s\n", ticket.BaseName)
 
 	// lookup language proc profile
 	proc_profile, err := ctx.procConfTable.Find(ticket.ProcId, ticket.ProcVersion)
@@ -67,10 +65,12 @@ func (ctx *Context) ExecTicket(
 	// run
 	if errs := ctx.execManagedRun(proc_profile,	ticket.BaseName, ticket.Sources, ticket.RunInst, callback); errs != nil {
 		// TODO: proess error
+		var s string
 		for err := range errs {
 			log.Printf("exec error %v\n", err)
+			s += fmt.Sprintf("%v: ", err)
 		}
-		return errors.New("Failed to exec inputs")
+		return errors.New("Failed to exec inputs : " + s)
 	}
 
 	return nil
@@ -91,9 +91,7 @@ func (ctx *Context) execManagedBuild(
 	bin_base_path := filepath.Join(ctx.basePath, "bin")
 
 	log.Printf("$$$$$$$$$$ START build => %s\n", base_name)
-	defer func() {
-		log.Printf("$$$$$$$$$$ FINISH build  => %s\n", base_name)
-	}()
+	defer log.Printf("$$$$$$$$$$ FINISH build  => %s\n", base_name)
 
 	//
 	if proc_profile.IsBuildRequired {
@@ -101,11 +99,13 @@ func (ctx *Context) execManagedBuild(
 		if err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
 			// compile phase
 			// map files
+			log.Printf("$$$$$$$$$$ START build: mapSources => %s\n", base_name)
 			if err := ctx.mapSources(base_name, sources, jailed_user, proc_profile); err != nil {
 				return err
 			}
 
 			//
+			log.Printf("$$$$$$$$$$ START build: invokeCompileCommand => %s\n", base_name)
 			if err := ctx.invokeCompileCommand(user_dir_path, user_home_path, bin_base_path, jailed_user, proc_profile, base_name, sources, build_inst, callback); err != nil {
 				if err == compileFailedError {
 					return buildFailedError
@@ -116,10 +116,12 @@ func (ctx *Context) execManagedBuild(
 
 			// link phase :: if link command is separated, so call linking commands
 			if proc_profile.IsLinkIndependent {
+				log.Printf("$$$$$$$$$$ START build: cleanupMountedFiles => %s\n", base_name)
 				if err := ctx.cleanupMountedFiles(base_name); err != nil {
 					return err
 				}
 
+				log.Printf("$$$$$$$$$$ START build: invokeLinkCommand => %s\n", base_name)
 				if err := ctx.invokeLinkCommand(user_dir_path, user_home_path, bin_base_path, jailed_user, proc_profile, base_name, sources, build_inst, callback); err != nil {
 					if err == linkFailedError {
 						return buildFailedError
@@ -149,9 +151,7 @@ func (ctx *Context) execManagedRun(
 	log.Println(">> called invokeRunCommand")
 
 	log.Printf("$$$$$$$$$$ START run => %s\n", base_name)
-	defer func() {
-		log.Printf("$$$$$$$$$$ FINISH run  => %s\n", base_name)
-	}()
+	defer log.Printf("$$$$$$$$$$ FINISH run  => %s\n", base_name)
 
 	//
 	user_dir_path := ctx.makeUserDirName(base_name)
@@ -159,13 +159,14 @@ func (ctx *Context) execManagedRun(
 	bin_base_path := filepath.Join(ctx.basePath, "bin")
 
 	// if it is build NOT required processor, sources have not been mapped yet
-	if !proc_profile.IsBuildRequired {
+	if ! proc_profile.IsBuildRequired {
 		if err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
 			// map files
 			if err := ctx.mapSources(base_name, sources, jailed_user, proc_profile); err != nil {
 				return err
 			}
 			return nil
+
 		}); err != nil {
 			return []error{err}
 		}
