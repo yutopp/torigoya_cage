@@ -154,7 +154,7 @@ func (bm *BridgeMessage) link() (*ExecutedResult, error) {
 	//
 	res_limit := &ResourceLimit{
 		CPU: 10,							// CPU limit(sec): 10sec[fixed]
-		AS: 1 * 1024 * 1024 * 1024,			// Memory limit(bytes): 1GiB[fixed]
+		AS: 2 * 1024 * 1024 * 1024,			// Memory limit(bytes): 2GiB[fixed]
 		FSize: 40 * 1024 * 1024,			// Process can writes a file only 40MiB[fixed]
 	}
 
