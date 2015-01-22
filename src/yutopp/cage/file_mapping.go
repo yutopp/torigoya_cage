@@ -254,8 +254,8 @@ func (ctx *Context) reassignTarget(
 		}
 	}
 
-	// host_user_id:managed_group_id // rwx/r-x/---
-	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0750); err != nil {
+	// host_user_id:managed_group_id // rwx/rwx/---
+	if err := guardPath(user_home_path, host_user_id, managed_group_id, 0770); err != nil {
 		return "", nil, err
 	}
 
