@@ -415,6 +415,7 @@ func (ctx *Context) mapSources(
 	//
 	if _, err := ctx.createMultipleTargetsWithDefaultName(
 		base_name,
+		jailed_user.UserId,
 		jailed_user.GroupId,
 		source_contents,
 		&default_filename,

@@ -42,11 +42,13 @@ type TextContent struct {
 
 func (ctx *Context) createTarget(
 	base_name			string,
+	managed_user_id		int,
 	managed_group_id	int,
 	source				*TextContent,
 ) (string, error) {
 	source_full_paths, err := ctx.createMultipleTargets(
 		base_name,
+		managed_user_id,
 		managed_group_id,
 		[]*TextContent{ source },
 	)
@@ -63,11 +65,13 @@ func (ctx *Context) createTarget(
 //
 func (ctx *Context) createMultipleTargets(
 	base_name			string,
+	managed_user_id		int,
 	managed_group_id	int,
 	sources				[]*TextContent,
 ) (source_full_paths []string, err error) {
 	return ctx.createMultipleTargetsWithDefaultName(
 		base_name,
+		managed_user_id,
 		managed_group_id,
 		sources,
 		nil,
@@ -77,6 +81,7 @@ func (ctx *Context) createMultipleTargets(
 //
 func (ctx *Context) createMultipleTargetsWithDefaultName(
 	base_name			string,
+	managed_user_id		int,
 	managed_group_id	int,
 	sources				[]*TextContent,
 	default_name		*string,
@@ -154,6 +159,18 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 	}
 
 	// ========================================
+	//// debug
+	defer func() {
+		log.Printf("==================================================\n")
+		out, err := exec.Command("/bin/ls", "-laR", user_home_path).Output()
+		if err != nil {
+			log.Printf("error:: %s\n", err.Error())
+		} else {
+			log.Printf("passed:: %s\n", out)
+		}
+	}()
+
+	// ========================================
 	//// make source file
 	source_full_paths = make([]string, len(sources))
 	for index, source := range sources {
@@ -180,9 +197,9 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 		}
 		defer func() {
 			f.Close()
-			log.Printf("-> %s\n", source_full_path)
-			// host_user_id:managed_group_id // r--/r--/---
-			err = guardPath(source_full_path, host_user_id, managed_group_id, 0440)
+			log.Printf("source -> %s | (user)[%d] : (user group)[%d]\n", source_full_path, managed_user_id, managed_group_id)
+			// managed_user_id:managed_group_id // r--/r--/---
+			err = guardPath(source_full_path, managed_user_id, managed_group_id, 0440)
 		}()
 
 		//
@@ -190,14 +207,6 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 
 		//
 		source_full_paths[index] = source_full_path
-	}
-
-	log.Printf("==================================================\n")
-	out, err := exec.Command("/bin/ls", "-laR", user_home_path).Output()
-	if err != nil {
-		log.Printf("error:: %s\n", err.Error())
-	} else {
-		log.Printf("passed:: %s\n", out)
 	}
 
 	return source_full_paths, err
@@ -263,13 +272,13 @@ func (ctx *Context) reassignTarget(
 	err = filepath.Walk(user_home_path, func(path string, info os.FileInfo, err error) error {
 		if err != nil { return err }
 		if !info.IsDir() {
-			if info.Mode() & 0100 != 0 {
-				// specialize if has permission --x/---/---
+			if filepath.Dir(path) == user_home_path {
+				// files are placed under the home
 				if err := os.Chown(path, managed_user_id, managed_group_id); err != nil {
 					return errors.New(fmt.Sprintf("Couldn't chown %s, %s", path, err.Error()))
 				}
 
-				log.Printf("reassgin::chown %s -> %d : %d \n", path, managed_user_id, managed_group_id)
+				log.Printf("reassgin::chown %s -> (user)[%d] : (user group)[%d] \n", path, managed_user_id, managed_group_id)
 
 			} else {
 				//
@@ -277,7 +286,7 @@ func (ctx *Context) reassignTarget(
 					return errors.New(fmt.Sprintf("Couldn't chown %s, %s", path, err.Error()))
 				}
 
-				log.Printf("reassgin::chown %s -> %d : %d \n", path, host_user_id, managed_group_id)
+				log.Printf("reassgin::chown %s -> (host)[%d] : (user group)[%d] \n", path, host_user_id, managed_group_id)
 			}
 		}
 		return err

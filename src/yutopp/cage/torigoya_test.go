@@ -34,9 +34,10 @@ func TestCreateTarget(t *testing.T) {
 		"prog.cpp",
 		[]byte("test test test"),
 	}
+	user_id := 1000
 	group_id := 1000
 
-	source_full_path, err := ctx.createTarget(base_name, group_id, content)
+	source_full_path, err := ctx.createTarget(base_name, user_id, group_id, content)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -66,10 +67,11 @@ func TestCreateTargetRepeat(t *testing.T) {
 		"prog.cpp",
 		[]byte("test test test"),
 	}
+	user_id := 1000
 	group_id := 1000
 
 	for i:=0; i<2; i++ {
-		if _, err := ctx.createTarget(base_name, group_id, content); err != nil {
+		if _, err := ctx.createTarget(base_name, user_id, group_id, content); err != nil {
 			t.Fatalf(err.Error())
 		}
 	}
@@ -94,7 +96,7 @@ func TestReassignTarget(t *testing.T) {
 	user_id := 1000
 	group_id := 1000
 
-	ctx.createTarget(base_name, group_id, content)
+	ctx.createTarget(base_name, user_id, group_id, content)
 
 	user_dir_path, _, err := ctx.reassignTarget(
 		base_name,
@@ -132,7 +134,7 @@ func TestReassignTarget2(t *testing.T) {
 	user_id := 1000
 	group_id := 1000
 
-	ctx.createTarget(base_name, group_id, content)
+	ctx.createTarget(base_name, user_id, group_id, content)
 
 	user_dir_path, _, err := ctx.reassignTarget(
 		base_name,
@@ -182,7 +184,7 @@ func TestCreateInput(t *testing.T) {
 		[]byte("iniini~~~"),
 	}
 
-	ctx.createTarget(base_name, group_id, content)
+	ctx.createTarget(base_name, user_id, group_id, content)
 
 	user_dir_path, input_path, err := ctx.reassignTarget(base_name, user_id, group_id, func(base_directory_name string) (*string, error) {
 		path, err := ctx.createInput(base_directory_name, group_id, stdin)
