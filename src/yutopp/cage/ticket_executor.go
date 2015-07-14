@@ -14,7 +14,9 @@ import(
 	"log"
 	"fmt"
 	"errors"
-	"path/filepath"
+	"os"
+	"io/ioutil"
+	_ "path/filepath"
 )
 
 
@@ -43,28 +45,31 @@ func (ctx *Context) ExecTicket(
 	ticket				*Ticket,
 	callback			invokeResultRecieverCallback,
 ) error {
-	log.Printf("$$$$$$$$$$ START ticket => %s\n", ticket.BaseName)
-	defer log.Printf("$$$$$$$$$$ FINISH ticket  => %s\n", ticket.BaseName)
+	log.Printf("-- START ticket => %s\n", ticket.BaseName)
+	defer log.Printf("-- FINISH ticket  => %s\n", ticket.BaseName)
 
-	// lookup language proc profile
-	proc_profile, err := ctx.procConfTable.Find(ticket.ProcId, ticket.ProcVersion)
+	log.Printf("mapSources => %s\n", ticket.BaseName)
+	// map files and create user's directory
+	path_used_as_home, err := ctx.mapSources(ticket.BaseName, ticket.Sources)
 	if err != nil {
 		return err
 	}
+	log.Printf("basePath => %s\n", path_used_as_home)
 
-	//
-	if err := ctx.execManagedBuild(proc_profile, ticket.BaseName, ticket.Sources, ticket.BuildInst, callback); err != nil {
-		if err == buildFailedError {
-			return nil
-		} else {
-			return err
+	// build
+	if ticket.IsBuildRequired() {
+		if err := ctx.execBuild(path_used_as_home, ticket.BuildInst, callback); err != nil {
+			if err == buildFailedError {
+				return nil	// not an error
+			} else {
+				return err
+			}
 		}
 	}
-	//
 
 	// run
-	if errs := ctx.execManagedRun(proc_profile,	ticket.BaseName, ticket.Sources, ticket.RunInst, callback); errs != nil {
-		// TODO: proess error
+	if errs := ctx.execManagedRun(path_used_as_home, ticket.RunInst, callback); errs != nil {
+		// TODO: process error
 		var s string
 		for err := range errs {
 			log.Printf("exec error %v\n", err)
@@ -78,63 +83,40 @@ func (ctx *Context) ExecTicket(
 
 
 //
-func (ctx *Context) execManagedBuild(
-	proc_profile		*ProcProfile,
-	base_name			string,
-	sources				[]*SourceData,
+func (ctx *Context) execBuild(
+	path_used_as_home	string,
 	build_inst			*BuildInstruction,
 	callback			invokeResultRecieverCallback,
 ) error {
-	//
-	user_dir_path := ctx.makeUserDirName(base_name)
-	user_home_path := ctx.jailedUserDir
-	bin_base_path := filepath.Join(ctx.basePath, "bin")
+	log.Printf("$$$$$$$$$$ START build => %s\n", path_used_as_home)
+	defer log.Printf("$$$$$$$$$$ FINISH build  => %s\n", path_used_as_home)
 
-	log.Printf("$$$$$$$$$$ START build => %s\n", base_name)
-	defer log.Printf("$$$$$$$$$$ FINISH build  => %s\n", base_name)
+	// compile phase
+	log.Printf("$$$$$$$$$$ START compile\n")
+	if err := ctx.invokeCompileCommand(
+		path_used_as_home,
+		build_inst.CompileSetting,
+		callback,
+	); err != nil {
+		if err == compileFailedError {
+			return buildFailedError
+		} else {
+			return err
+		}
+	}
 
-	//
-	if proc_profile.IsBuildRequired {
-		// build required processor
-		if err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
-			// compile phase
-			// map files
-			log.Printf("$$$$$$$$$$ START build: mapSources => %s\n", base_name)
-			if err := ctx.mapSources(base_name, sources, jailed_user, proc_profile); err != nil {
+	// link phase :: if link command is separated, so call linking commands
+	if build_inst.IsLinkIndependent() {
+		if err := ctx.invokeLinkCommand(
+			path_used_as_home,
+			build_inst.LinkSetting,
+			callback,
+		); err != nil {
+			if err == linkFailedError {
+				return buildFailedError
+			} else {
 				return err
 			}
-
-			//
-			log.Printf("$$$$$$$$$$ START build: invokeCompileCommand => %s\n", base_name)
-			if err := ctx.invokeCompileCommand(user_dir_path, user_home_path, bin_base_path, jailed_user, proc_profile, base_name, sources, build_inst, callback); err != nil {
-				if err == compileFailedError {
-					return buildFailedError
-				} else {
-					return err
-				}
-			}
-
-			// link phase :: if link command is separated, so call linking commands
-			if proc_profile.IsLinkIndependent {
-				log.Printf("$$$$$$$$$$ START build: cleanupMountedFiles => %s\n", base_name)
-				if err := ctx.cleanupMountedFiles(base_name); err != nil {
-					return err
-				}
-
-				log.Printf("$$$$$$$$$$ START build: invokeLinkCommand => %s\n", base_name)
-				if err := ctx.invokeLinkCommand(user_dir_path, user_home_path, bin_base_path, jailed_user, proc_profile, base_name, sources, build_inst, callback); err != nil {
-					if err == linkFailedError {
-						return buildFailedError
-					} else {
-						return err
-					}
-				}
-			}
-
-			return nil
-
-		}); err != nil {
-			return err
 		}
 	}
 
@@ -142,55 +124,24 @@ func (ctx *Context) execManagedBuild(
 }
 
 func (ctx *Context) execManagedRun(
-	proc_profile		*ProcProfile,
-	base_name			string,
-	sources				[]*SourceData,
+	path_used_as_home	string,
 	run_inst			*RunInstruction,
 	callback			invokeResultRecieverCallback,
 ) []error {
-	log.Println(">> called invokeRunCommand")
-
-	log.Printf("$$$$$$$$$$ START run => %s\n", base_name)
-	defer log.Printf("$$$$$$$$$$ FINISH run  => %s\n", base_name)
-
-	//
-	user_dir_path := ctx.makeUserDirName(base_name)
-	user_home_path := ctx.jailedUserDir
-	bin_base_path := filepath.Join(ctx.basePath, "bin")
-
-	// if it is build NOT required processor, sources have not been mapped yet
-	if ! proc_profile.IsBuildRequired {
-		if err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
-			// map files
-			if err := ctx.mapSources(base_name, sources, jailed_user, proc_profile); err != nil {
-				return err
-			}
-			return nil
-
-		}); err != nil {
-			return []error{err}
-		}
-	}
+	log.Printf("$$$$$$$$$$ START run => %s\n", path_used_as_home)
+	defer log.Printf("$$$$$$$$$$ FINISH run => %s\n", path_used_as_home)
 
 	//
 	var errs []error = nil
 	// ========================================
 	for index, input := range run_inst.Inputs {
 		// TODO: async
-		err := runAsManagedUser(func(jailed_user *JailedUserInfo) error {
-			return ctx.invokeRunCommand(
-				user_dir_path,
-				user_home_path,
-				bin_base_path,
-				jailed_user,
-
-				base_name,
-				proc_profile,
-				index,
-				&input,
-				callback,
-			)
-		})
+		err := ctx.invokeRunCommand(
+			path_used_as_home,
+			index,
+			&input,
+			callback,
+		)
 
 		if err != nil {
 			if errs == nil { errs = make([]error, 0) }
@@ -207,190 +158,202 @@ func (ctx *Context) execManagedRun(
 
 
 func (ctx *Context) invokeCompileCommand(
-	user_dir_path		string,
-	user_home_path		string,
-	bin_base_path		string,
-	jailed_user			*JailedUserInfo,
-	proc_profile		*ProcProfile,
-	base_name			string,
-	sources				[]*SourceData,
-	build_inst			*BuildInstruction,
+	path_used_as_home	string,
+	exec_inst			*ExecutionSetting,
 	callback			invokeResultRecieverCallback,
 ) error {
 	log.Println(">> called invokeCompileCommand")
 
-	if build_inst == nil { return errors.New("compile_dataset is nil") }
-	if build_inst.CompileSetting == nil {
-		return errors.New("build_inst.CompileSetting is nil")
-	}
+	const GuestHome = "/home/torigoya"
 
-	//
-	message := BridgeMessage{
-		ChrootPath: user_dir_path,
-		JailedUserHomePath: user_home_path,
-		JailedUser: jailed_user,
-		Message: ExecMessage{
-			Profile: proc_profile,
-			Setting: build_inst.CompileSetting,
-			Mode: CompileMode,
+	opts := &SandboxExecutionOption{
+		Mounts:	[]MountOption{
+			MountOption{
+				HostPath: path_used_as_home,
+				GuestPath: GuestHome,
+				IsReadOnly: false,
+			},
 		},
-		IsReboot: false,
+		GuestHomePath: GuestHome,
+		Limits: &ResourceLimit{
+			Core: 0,							// Process can NOT create CORE file
+			Nofile: 512,						// Process can open 512 files
+			NProc: 30,							// Process can create processes to 30
+			MemLock: 1024,						// Process can lock 1024 Bytes by mlock(2)
+			CpuTime: exec_inst.CpuTimeLimit,	// sec
+			Memory: exec_inst.MemoryBytesLimit,	// bytes
+			FSize: 5 * 1024 * 1024,				// Process can writes a file only 5MiB
+		},
+		Args: exec_inst.Args,
+		Envs: exec_inst.Envs,
 	}
 
-	//
-	build_output_stream := make(chan *StreamOutput)
-	closed_ch := make(chan bool)
-	go sendOutputToCallback(callback, build_output_stream, CompileMode, 0, closed_ch)
-
-	//
-	result, err := message.invokeProcessCloner(bin_base_path, build_output_stream, base_name)
-
-	//
-	<-closed_ch
-	if err != nil { return err }
-	sendResultToCallback(callback, result, CompileMode, 0)
-
-	if result.IsFailed() {
-		return compileFailedError
+	f := func(output *StreamOutput) {
+		callback(&StreamOutputResult{
+			Mode: CompileMode,
+			Index: 0,
+			Output: output,
+		})
+	}
+	result, err := ctx.sandboxExecutor.Execute(opts, nil, f)
+	log.Println(">> %v", result)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	callback(&StreamExecutedResult{
+		Mode: CompileMode,
+		Index: 0,
+		Result: result,
+	})
+
+	return err
 }
 
+
 func (ctx *Context) invokeLinkCommand(
-	user_dir_path		string,
-	user_home_path		string,
-	bin_base_path		string,
-	jailed_user			*JailedUserInfo,
-	proc_profile		*ProcProfile,
-	base_name			string,
-	sources				[]*SourceData,
-	build_inst			*BuildInstruction,
+	path_used_as_home	string,
+	exec_inst			*ExecutionSetting,
 	callback			invokeResultRecieverCallback,
 ) error {
 	log.Println(">> called invokeLinkCommand")
 
-	//
-	if build_inst == nil { return errors.New("compile_dataset is nil") }
-	if build_inst.LinkSetting == nil {
-		return errors.New("build_inst.LinkSetting is nil")
-	}
+	const GuestHome = "/home/torigoya"
 
-	//
-	message := BridgeMessage{
-		ChrootPath: user_dir_path,
-		JailedUserHomePath: user_home_path,
-		JailedUser: jailed_user,
-		Message: ExecMessage{
-			Profile: proc_profile,
-			Setting: build_inst.LinkSetting,
-			Mode: LinkMode,
+	opts := &SandboxExecutionOption{
+		Mounts:	[]MountOption{
+			MountOption{
+				HostPath: path_used_as_home,
+				GuestPath: GuestHome,
+				IsReadOnly: false,
+			},
 		},
-		IsReboot: false,
+		GuestHomePath: GuestHome,
+		Limits: &ResourceLimit{
+			Core: 0,							// Process can NOT create CORE file
+			Nofile: 512,						// Process can open 512 files
+			NProc: 30,							// Process can create processes to 30
+			MemLock: 1024,						// Process can lock 1024 Bytes by mlock(2)
+			CpuTime: 10,						// 10 sec
+			Memory: 2 * 1024 * 1024 * 1024,		// 2GiB[fixed]
+			FSize: 40 * 1024 * 1024,			// 40MiB[fixed]
+		},
+		Args: exec_inst.Args,
+		Envs: exec_inst.Envs,
 	}
 
-	//
-	link_output_stream := make(chan *StreamOutput)
-	closed_ch := make(chan bool)
-	go sendOutputToCallback(callback, link_output_stream, LinkMode, 0, closed_ch)
-
-	//
-	result, err := message.invokeProcessCloner(bin_base_path, link_output_stream, base_name)
-
-	//
-	<-closed_ch
-	if err != nil { return err }
-	sendResultToCallback(callback, result, LinkMode, 0)
-
-	if result.IsFailed() {
-		return linkFailedError
+	f := func(output *StreamOutput) {
+		callback(&StreamOutputResult{
+			Mode: LinkMode,
+			Index: 0,
+			Output: output,
+		})
+	}
+	result, err := ctx.sandboxExecutor.Execute(opts, nil, f)
+	log.Println(">> %v", result)
+	if err != nil {
+		return err
 	}
 
-	return nil
+	callback(&StreamExecutedResult{
+		Mode: LinkMode,
+		Index: 0,
+		Result: result,
+	})
+
+	return err
 }
 
 func (ctx *Context) invokeRunCommand(
-	user_dir_path		string,
-	user_home_path		string,
-	bin_base_path		string,
-	jailed_user			*JailedUserInfo,
-
-	base_name			string,
-	proc_profile		*ProcProfile,
+	path_used_as_home	string,
 	index				int,
 	input				*Input,
 	callback			invokeResultRecieverCallback,
 ) error {
 	log.Println(">> called invokeRunInputCommand")
 
-	// TODO: add lock
-	// reassign base files to new user
-	user_dir_path, input_path, err := ctx.reassignTarget(
-		base_name,
-		jailed_user.UserId,
-		jailed_user.GroupId,
-		func(base_directory_name string) (*string, error) {
-			if input.stdin != nil {
-				// stdin exists
+	const GuestHome = "/home/torigoya"
+	const GuestInputs = "/home/torigoya/inputs"
 
-				// unpack source codes
-				stdin_content, err := convertSourceToContent(input.stdin)
-				if err != nil { return nil, err }
+	// stdin := input.stdin
+	exec_inst := input.setting
 
-				path, err := ctx.createInput(base_directory_name, jailed_user.GroupId, stdin_content)
-				if err != nil { return nil, err }
-				return &path, nil
-
-			} else {
-				// nothing to do
-				return nil, nil
-			}
-		},
-	)
-	if err != nil { return err }
-
-	//
-	var stdin_path *string = nil
+	var temp_stdin *os.File = nil
 	if input.stdin != nil {
-		if input_path == nil { return errors.New("invalid stdin file") }
+		log.Println("use stdin")
 
-		// adjust path to jailed env
-		real_user_home_path := filepath.Join(user_dir_path, user_home_path)
-		stdin_path_val, err := filepath.Rel(real_user_home_path, *input_path)
-		if err != nil {}
+		f, err := ioutil.TempFile("", "torigoya-inputs-");
+		if err != nil { return err }
+		defer f.Close()
 
-		stdin_path = &stdin_path_val
+		n, err := f.Write(input.stdin.Data)
+		if err != nil {
+			return err
+		}
+		if n != len(input.stdin.Data) {
+			return errors.New("input length is different")
+		}
+
+		noff, err := f.Seek(0, os.SEEK_SET)
+		if err != nil {
+			return err
+		}
+		if noff != 0 {
+			return errors.New("offseet is not 0")
+		}
+
+		// r--/---/---
+		if err := f.Chmod(0400); err != nil {
+			return err
+		}
+
+		temp_stdin = f
 	}
 
-	//
-	message := BridgeMessage{
-		ChrootPath: user_dir_path,
-		JailedUserHomePath: user_home_path,
-		JailedUser: jailed_user,
-		Message: ExecMessage{
-			Profile: proc_profile,
-			StdinFilePath: stdin_path,
-			Setting: input.setting,
-			Mode: RunMode,
+	opts := &SandboxExecutionOption{
+		Mounts:	[]MountOption{
+			MountOption{
+				HostPath: path_used_as_home,
+				GuestPath: GuestHome,
+				IsReadOnly: false,
+			},
 		},
-		IsReboot: false,
+		GuestHomePath: GuestHome,
+		Limits: &ResourceLimit{
+			Core: 0,							// Process can NOT create CORE file
+			Nofile: 512,						// Process can open 512 files
+			NProc: 30,							// Process can create processes to 30
+			MemLock: 1024,						// Process can lock 1024 Bytes by mlock(2)
+			CpuTime: exec_inst.CpuTimeLimit,	// sec
+			Memory: exec_inst.MemoryBytesLimit,	// bytes
+			FSize: 1 * 1024 * 1024,				// Process can writes a file only 1MB
+		},
+		Args: exec_inst.Args,
+		Envs: exec_inst.Envs,
 	}
 
-	//
-	run_output_stream := make(chan *StreamOutput)
-	closed_ch := make(chan bool)
-	go sendOutputToCallback(callback, run_output_stream, RunMode, index, closed_ch)
+	f := func(output *StreamOutput) {
+		callback(&StreamOutputResult{
+			Mode: RunMode,
+			Index: index,
+			Output: output,
+		})
+	}
+	result, err := ctx.sandboxExecutor.Execute(opts, temp_stdin, f)
+	log.Println(">> %v", result)
+	if err != nil {
+		return err
+	}
 
-	//
-	result, err := message.invokeProcessCloner(bin_base_path, run_output_stream, base_name)
+	callback(&StreamExecutedResult{
+		Mode: RunMode,
+		Index: index,
+		Result: result,
+	})
 
-	//
-	<-closed_ch
-	if err != nil { return err }
-	sendResultToCallback(callback, result, RunMode, index)
-
-	return nil
+	return err
 }
+
 
 
 // ========================================
@@ -400,30 +363,23 @@ func (ctx *Context) invokeRunCommand(
 func (ctx *Context) mapSources(
 	base_name			string,
 	sources				[]*SourceData,
-	jailed_user			*JailedUserInfo,
-	proc_profile		*ProcProfile,
-) error {
+) (string, error) {
 	// unpack source codes
 	source_contents, err := convertSourcesToContents(sources)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	//
-	default_filename := fmt.Sprintf("%s.%s", proc_profile.Source.File, proc_profile.Source.Extension)
-
-	//
-	if _, err := ctx.createMultipleTargetsWithDefaultName(
+	user_home_dir_path, err := ctx.createMultipleTargets(
 		base_name,
-		jailed_user.UserId,
-		jailed_user.GroupId,
 		source_contents,
-		&default_filename,
-	); err != nil {
-		return errors.New("couldn't create multi target : " + err.Error());
+	)
+	if err != nil {
+		return "", errors.New("couldn't create multi target : " + err.Error());
 	}
 
-	return nil
+	return user_home_dir_path, nil
 }
 
 
@@ -456,54 +412,3 @@ func (r *StreamExecutedResult) ToTuple() []interface{} {
 
 //
 type invokeResultRecieverCallback		func(interface{})
-
-
-//
-func sendOutputToCallback(
-	callback			invokeResultRecieverCallback,
-	output_stream		chan *StreamOutput,
-	mode				int,
-	index				int,
-	closed_ch			chan bool,
-) {
-	nil_count := 0
-
-	for out := range output_stream {
-		if out == nil {
-			nil_count = nil_count + 1
-		}
-
-		// nil is sent when output becomes empty
-		// 2 = stdout + stderr
-		if nil_count >= 2 {
-			close(output_stream)
-			closed_ch <- true
-			break
-		}
-
-		if out != nil && callback != nil {
-			callback(&StreamOutputResult{
-				Mode: mode,
-				Index: index,
-				Output: out,
-			})
-		}
-	}
-}
-
-
-//
-func sendResultToCallback(
-	callback			invokeResultRecieverCallback,
-	result				*ExecutedResult,
-	mode				int,
-	index				int,
-) {
-	if callback != nil {
-		callback(&StreamExecutedResult{
-			Mode: mode,
-			Index: index,
-			Result: result,
-		})
-	}
-}

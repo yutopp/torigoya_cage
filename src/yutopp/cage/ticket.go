@@ -54,51 +54,6 @@ func convertSourceToContent(
 }
 
 
-// ========================================
-type ExecutionSetting struct {
-	CommandLine			string
-	StructuredCommand	[][]string
-	CpuTimeLimit		uint64
-	MemoryBytesLimit	uint64
-}
-
-
-// ========================================
-type BuildInstruction struct {
-	CompileSetting		*ExecutionSetting
-	LinkSetting			*ExecutionSetting
-}
-
-
-// ========================================
-type Input struct{
-	stdin				*SourceData
-	setting				*ExecutionSetting
-}
-
-
-// ========================================
-type RunInstruction struct {
-	Inputs				[]Input
-}
-
-
-// ========================================
-type Ticket struct {
-	BaseName		string
-	ProcId			uint64
-	ProcVersion		string
-	Sources			[]*SourceData
-	BuildInst		*BuildInstruction
-	RunInst			*RunInstruction
-}
-
-
-// ========================================
-// ========================================
-
-
-// ========================================
 func MakeSourceDataFromTuple(tupled interface{}) (*SourceData, error) {
 	if tupled == nil { return nil, nil }
 	interface_array, ok := tupled.([]interface{})
@@ -123,12 +78,21 @@ func MakeSourceDataFromTuple(tupled interface{}) (*SourceData, error) {
 
 
 // ========================================
+type ExecutionSetting struct {
+	Args				[]string
+	Envs				[]string
+	CpuTimeLimit		uint64
+	MemoryBytesLimit	uint64
+}
+
+
 func MakeExecutionSettingFromTuple(tupled interface{}) (*ExecutionSetting, error) {
 	if tupled == nil { return nil, nil }
+
 	interface_array, ok := tupled.([]interface{})
 	if !ok { return nil, errors.New("ExecutionSetting::invalid data(total)") }
 	if len(interface_array) != 4 { return nil, errors.New("ExecutionSetting::invalid data(num of lement)") }
-
+/*
 	//
 	command_line_bytes, ok := interface_array[0].([]byte)
 	if !ok { return nil, errors.New("ExecutionSetting::invalid data(0)") }
@@ -151,7 +115,7 @@ func MakeExecutionSettingFromTuple(tupled interface{}) (*ExecutionSetting, error
 		}
 		structured_commands[i] = commands
 	}
-
+*/
 	//
 	cpu_time_limit, ok := readUInt(interface_array[2])
 	if !ok { return nil, errors.New("ExecutionSetting::invalid data(2)") }
@@ -162,8 +126,8 @@ func MakeExecutionSettingFromTuple(tupled interface{}) (*ExecutionSetting, error
 
 	//
 	return &ExecutionSetting{
-		CommandLine: string(command_line_bytes),
-		StructuredCommand: structured_commands,
+		Args: nil,
+		Envs: nil,
 		CpuTimeLimit: cpu_time_limit,
 		MemoryBytesLimit: memory_bytes_limit,
 	}, nil
@@ -171,6 +135,16 @@ func MakeExecutionSettingFromTuple(tupled interface{}) (*ExecutionSetting, error
 
 
 // ========================================
+type BuildInstruction struct {
+	CompileSetting		*ExecutionSetting
+	LinkSetting			*ExecutionSetting
+}
+
+func (build_inst *BuildInstruction) IsLinkIndependent() bool {
+	return build_inst.LinkSetting != nil
+}
+
+
 func MakeBuildInstructionFromTuple(tupled interface{}) (*BuildInstruction, error) {
 	if tupled == nil { return nil, nil }
 	interface_array, ok := tupled.([]interface{})
@@ -191,6 +165,12 @@ func MakeBuildInstructionFromTuple(tupled interface{}) (*BuildInstruction, error
 
 
 // ========================================
+type Input struct{
+	stdin				*SourceData
+	setting				*ExecutionSetting
+}
+
+
 func MakeInputFromTuple(tupled interface{}) (*Input, error) {
 	if tupled == nil { return nil, nil }
 	interface_array, ok := tupled.([]interface{})
@@ -213,6 +193,11 @@ func MakeInputFromTuple(tupled interface{}) (*Input, error) {
 
 
 // ========================================
+type RunInstruction struct {
+	Inputs				[]Input
+}
+
+
 func MakeRunInstructionFromTuple(tupled interface{}) (*RunInstruction, error) {
 	if tupled == nil { return nil, nil }
 	interface_array, ok := tupled.([]interface{})
@@ -238,27 +223,31 @@ func MakeRunInstructionFromTuple(tupled interface{}) (*RunInstruction, error) {
 
 
 // ========================================
+type Ticket struct {
+	BaseName		string
+	Sources			[]*SourceData
+	BuildInst		*BuildInstruction
+	RunInst			*RunInstruction
+}
+
+func (ticket *Ticket) IsBuildRequired() bool {
+	return ticket.BuildInst != nil
+}
+
+
 func MakeTicketFromTuple(tupled interface{}) (*Ticket, error) {
 	if tupled == nil { return nil, nil }
 	interface_array, ok := tupled.([]interface{})
-	if !ok { return nil, errors.New("Ticket::invalid data(total)") }
-	if len(interface_array) != 6 { return nil, errors.New("Ticket::invalid data(num of lement)") }
+	if !ok { return nil, errors.New("Ticket::invalid data: not an array") }
+	if len(interface_array) != 4 { return nil, errors.New("Ticket::invalid data: num of lement") }
 
 	//
 	base_name_bytes, ok := interface_array[0].([]byte)
 	if !ok { return nil, errors.New("Ticket::invalid data(0)") }
 
 	//
-	proc_id, ok := readUInt(interface_array[1])
-	if !ok { return nil, errors.New("Ticket::invalid data(1)") }
-
-	//
-	proc_version_bytes, ok := interface_array[2].([]byte)
-	if !ok { return nil, errors.New("Ticket::invalid data(2)") }
-
-	//
-	sources_interface_array, ok := interface_array[3].([]interface{})
-	if !ok { return nil, errors.New("Ticket::invalid data(3)") }
+	sources_interface_array, ok := interface_array[1].([]interface{})
+	if !ok { return nil, errors.New("Ticket::invalid data: sources [index: 0]") }
 	var sources []*SourceData
 	for _, source_interface := range sources_interface_array {
 		source, err := MakeSourceDataFromTuple(source_interface)
@@ -268,18 +257,16 @@ func MakeTicketFromTuple(tupled interface{}) (*Ticket, error) {
 	}
 
 	//
-	bi, err := MakeBuildInstructionFromTuple(interface_array[4])
+	bi, err := MakeBuildInstructionFromTuple(interface_array[2])
 	if err != nil { return nil, err }
 
 	//
-	ri, err := MakeRunInstructionFromTuple(interface_array[5])
+	ri, err := MakeRunInstructionFromTuple(interface_array[3])
 	if err != nil { return nil, err }
 
 	//
 	return &Ticket{
 		BaseName: string(base_name_bytes),
-		ProcId: proc_id,
-		ProcVersion: string(proc_version_bytes),
 		Sources: sources,
 		BuildInst: bi,
 		RunInst: ri,

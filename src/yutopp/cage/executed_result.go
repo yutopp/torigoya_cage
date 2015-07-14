@@ -29,7 +29,7 @@ const (
 
 //
 type ExecutedResult struct {
-	UsedCPUTimeSec		float32
+	UsedCPUTimeSec		float64
 	UsedMemoryBytes		uint64
 	Signal				*syscall.Signal
 	ReturnCode			int

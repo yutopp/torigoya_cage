@@ -17,7 +17,7 @@ import (
 	"io/ioutil"
 
 	"yutopp/cage"
-
+	"path/filepath"
 	"gopkg.in/v1/yaml"
 )
 
@@ -101,13 +101,18 @@ func main() {
 
 	//
 	// make context!
-	ctx, err := torigoya.InitContext(
-		cwd,
-		target_config.HostUser,
-		target_config.LangProcConfigDir,
-		target_config.LangProcUpdateZipAddress,
-		updater,
-	)
+	ctx_opt := &torigoya.ContextOptions{
+		BasePath: cwd,
+		UserFilesBasePath: filepath.Join(cwd, "fugafugafuga"),
+
+		SandboxExec: &torigoya.AwahoSandboxExecutor{
+		},
+
+		ProcConfigPath: target_config.LangProcConfigDir,
+		ProcSrcZipAddress: target_config.LangProcUpdateZipAddress,
+		PackageUpdater: updater,
+	}
+	ctx, err := torigoya.InitContext(ctx_opt)
 	if err != nil {
 		log.Panicf(err.Error())
 	}

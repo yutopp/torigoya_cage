@@ -16,8 +16,10 @@ import(
 	"time"
 	"errors"
 	"os"
-	"syscall"
-	"path/filepath"
+	"strconv"
+	"encoding/json"
+	"sync"
+	"io"
 )
 
 
@@ -39,269 +41,298 @@ func (s *StreamOutput) ToTuple() []interface{} {
 	return []interface{}{ s.Fd, s.Buffer }
 }
 
-//
-func (bm *BridgeMessage) invokeProcessCloner(
-	cloner_dir		string,
-	output_stream	chan<-*StreamOutput,
-	debug_tag		string,
-) (*ExecutedResult, error) {
-	log.Println(">> called invokeProcessCloner")
+func (exec *AwahoSandboxExecutor) makeMountOptions(
+	opts	*SandboxExecutionOption,
+) []string {
+	if opts.Mounts == nil {
+		return []string{}
+	}
 
-	return invokeProcessClonerBase(cloner_dir, "process_cloner", bm, output_stream, debug_tag)
+	xs := make([]string, len(opts.Mounts) * 2)
+	for _, mount := range opts.Mounts {
+		aux := func() string {
+			if mount.IsReadOnly {
+				return "ro"
+			} else {
+				return "rw"
+			}
+		}()
+
+		xs = append(
+			xs,
+			[]string{
+				"--mount", mount.HostPath + ":" + mount.GuestPath + ":" + aux,
+			}...
+		)
+	}
+
+	return xs
+}
+
+func (exec *AwahoSandboxExecutor) makeCopyOptions(
+	opts	*SandboxExecutionOption,
+) []string {
+	if opts.Copies == nil {
+		return []string{}
+	}
+
+	xs := make([]string, len(opts.Copies) * 2)
+	for _, copy := range opts.Copies {
+		xs = append(
+			xs,
+			[]string{
+				"--copy", copy.HostPath + ":" + copy.GuestPath,
+			}...
+		)
+	}
+
+	return xs
+}
+
+func (exec *AwahoSandboxExecutor) makeEnvOptions(
+	opts	*SandboxExecutionOption,
+) []string {
+	if opts.Envs == nil {
+		return []string{}
+	}
+
+	xs := make([]string, len(opts.Envs) * 2)
+	for _, env := range opts.Envs {
+		xs = append(
+			xs, []string{"--env", env}...
+		)
+	}
+
+	return xs
+}
+
+type pipeFiles struct {
+	r	*os.File		// io for read
+	w	*os.File		// io for write
+	m	*sync.Mutex		// mutex
+}
+
+func makePipe() (*pipeFiles, func(), error) {
+	stdout_m := new(sync.Mutex)
+	stdout_r, stdout_w, err := os.Pipe()
+	if err != nil { return nil, nil, err }
+
+	dtor := func() {
+		stdout_m.Lock()
+		stdout_r.Close()
+		stdout_w.Close()
+		stdout_m.Unlock()
+	}
+
+	return &pipeFiles{
+		r: stdout_r,
+		w: stdout_w,
+		m: stdout_m,
+	}, dtor, nil
+}
+
+func readPipeOutputAsync(
+	pipe		*pipeFiles,
+	fdAs		OutFd,
+	callback	ExecuteCallBackType,
+) <-chan error {
+	ch := make(chan error)
+
+	go func() {
+		buffer := make([]byte, ReadLength)
+
+		for {
+			pipe.m.Lock()
+			log.Printf("=> READREADREAD")
+			size, err := pipe.r.Read(buffer)
+			log.Printf("=> READREADREAD => size=%v err=%v", size, err)
+			pipe.m.Unlock()
+			if err != nil {
+				if err == io.EOF {
+					log.Printf("Terminate success fully")
+					ch <- nil
+					break
+				} else {
+					log.Printf("Failed to Read: %v", err)
+					ch <- nil	// TODO: change to err
+					break
+				}
+			}
+			if size > 0 {
+				copied := make([]byte, size)
+				copy(copied, buffer[:size])
+
+				callback(&StreamOutput{
+					Fd: fdAs,
+					Buffer: copied,
+				})
+			}
+
+			log.Printf("=> %v", string(buffer[:size]))
+		}
+	}()
+
+	return ch
 }
 
 
-//
-func invokeProcessClonerBase(
-	cloner_dir		string,
-	cloner_name		string,
-	bm				*BridgeMessage,
-	output_stream	chan<-*StreamOutput,
-	debug_tag		string,
+type result_t struct {
+	result	*A
+	err		error
+}
+
+func readResultAsync(
+	pipe		*pipeFiles,
+) <-chan result_t {
+	ch := make(chan result_t)
+
+	go func() {
+		pipe.m.Lock()
+		defer pipe.m.Unlock()
+
+		dec := json.NewDecoder(pipe.r)
+
+		var result_detail A
+		if err := dec.Decode(&result_detail); err != nil {
+			ch <- result_t{ nil, err }
+			return
+		}
+
+		ch <- result_t{ &result_detail, nil }
+	}()
+
+	return ch
+}
+
+
+func (exec *AwahoSandboxExecutor) Execute(
+	opts		*SandboxExecutionOption,
+	stdin_f		*os.File,					// nullable
+	callback	ExecuteCallBackType,
 ) (*ExecutedResult, error) {
-	// pipe for
-	stdout_pipe, err := makePipeNonBlocking()
-	if err != nil { return nil, err }
-	defer stdout_pipe.Close()
+	log.Println(">> AwahoSandboxExecutor::Execute")
 
-	stderr_pipe, err := makePipeNonBlocking()
+	// for stdout / CLOSE_EXEC
+	stdout, stdout_dtor, err := makePipe()
 	if err != nil { return nil, err }
-	defer stderr_pipe.Close()
+	defer stdout_dtor()
 
-	result_pipe, err := makePipe()
+	// for stderr / CLOSE_EXEC
+	stderr, stderr_dtor, err := makePipe()
 	if err != nil { return nil, err }
-	defer result_pipe.Close()
+	defer stderr_dtor()
 
-	// init default value
-	if bm == nil {
-		bm = &BridgeMessage{}
-	}
-	// update pipe data to message
-	bm.Pipes = &BridgePipes{
-		Stdout: stdout_pipe,
-		Stderr: stderr_pipe,
-		Result: result_pipe,
-	}
+	// for result / CLOSE_EXEC
+	result_p, result_p_dtor, err := makePipe()
+	if err != nil { return nil, err }
+	defer result_p_dtor()
 
 	//
 	args := []string{
-		cloner_name,
+		exec.ExecutablePath,
+		"--start-guest-path", opts.GuestHomePath,
+		"--pipe", "4:1",	// (stdout in sandbox)
+		"--pipe", "5:2",	// (stderr in sandbox)
+		"--result-fd", "6",	// result reciever
+		"--core", strconv.FormatUint(opts.Limits.Core, 10),
+		"--nofile", strconv.FormatUint(opts.Limits.Nofile, 10),
+		"--nproc", strconv.FormatUint(opts.Limits.NProc, 10),
+		"--memlock", strconv.FormatUint(opts.Limits.MemLock, 10),
+		"--cputime", strconv.FormatUint(opts.Limits.CpuTime, 10),
+		"--memory", strconv.FormatUint(opts.Limits.Memory, 10),
+		"--fsize", strconv.FormatUint(opts.Limits.FSize, 10),
 	}
+	if stdin_f != nil {
+		args = append(args, []string{
+			"--pipe", "3:0",	// (stdin in sandbox)
+		}...)
+	}
+	args = append(args, exec.makeMountOptions(opts)...)
+	args = append(args, exec.makeCopyOptions(opts)...)
+	args = append(args, exec.makeEnvOptions(opts)...)
+	args = append(args, "--")
+	args = append(args, opts.Args...)
 
-	//
-	callback_path := filepath.Join(cloner_dir, "cage.callback")
-	content_string, err := bm.Encode()
-	if err != nil { return nil, err }
 	attr := os.ProcAttr{
-		Env: []string{
-			"callback_executable=" + callback_path,
-			"packed_torigoya_content=" + content_string,
-			"debug_tag=" + debug_tag,
+		Files: []*os.File{
+			nil,		// 0 (not be used)
+			os.Stdout,	// 1
+			os.Stderr,	// 2
+			stdin_f,	// 3 (stdin in sandbox)
+			stdout.w,	// 4 (stdout in sandbox)
+			stderr.w,	// 5 (stderr in sandbox)
+			result_p.w,	// 6 result reciever
 		},
+		Env: []string{},
 	}
 
-	// Invoke Cloner
-	cloner_path := filepath.Join(cloner_dir, cloner_name)
-	log.Printf("%s: Cloner path: %s", debug_tag, cloner_path)
-	process, err := os.StartProcess(cloner_path, args, &attr)
+
+	// invoke sandbox executor
+	process, err := os.StartProcess(exec.ExecutablePath, args, &attr)
 	if err != nil {
 		return nil, err
 	}
 
-	//
-	stdout_pipe.CloseWrite()
-	stderr_pipe.CloseWrite()
-	result_pipe.CloseWrite()
-
-	// parent process
-	wait_pid_chan := make(chan *os.ProcessState)
-	go func() {
-		ps, _ := process.Wait()
-		log.Printf("?? $ ?? FOUND: %s\n", debug_tag)
-		wait_pid_chan <- ps
-	}()
-
-	// read stdout/stderr
-	force_close_out := make(chan bool)
-	stdout_err := make(chan error)
-	go readPipeAsync(stdout_pipe.ReadFd, stdout_err, StdoutFd, force_close_out, output_stream)
-	force_close_err := make(chan bool)
-	stderr_err := make(chan error)
-	go readPipeAsync(stderr_pipe.ReadFd, stderr_err, StderrFd, force_close_err, output_stream)
+	if err = stdout.w.Close(); err != nil { return nil, err }
+	if err = stderr.w.Close(); err != nil { return nil, err }
+	if err = result_p.w.Close(); err != nil { return nil, err }
 
 	//
-	force_quit := false
+	stdout_read_err_ch := readPipeOutputAsync(stdout, StdoutFd, callback)
+	stderr_read_err_ch := readPipeOutputAsync(stderr, StderrFd, callback)
 
-	//
-	defer func() {
-		log.Printf("%s: wait for closeing wait_pid_chan => %v\n", debug_tag, force_quit)
-		close(wait_pid_chan)
+	// blocking, wait for finish process
+	ps, _ := process.Wait()
+	log.Printf("=> process finished")
 
-		if force_quit {
-			//force_close_out <- true
-			//force_close_err <- true
-		}
-
-		// out
-		log.Printf("%s: wait for recieving stdout_err\n", debug_tag)
-		select {
-		case err := <-stdout_err:
-			if err != nil {
-				log.Printf("??STDOUT ERROR: %v\n", err)
-			}
-
-		default:
-			// not finished...
-			force_close_out <- true
-		}
-		log.Printf("%s: wait for closeing stdout_err\n", debug_tag)
-		close(force_close_out)
-
-		// err
-		log.Printf("%s: wait for recieving stderr_err\n", debug_tag)
-		select {
-		case err := <-stderr_err:
-			if err != nil {
-				log.Printf("??STDERR ERROR: %v\n", err)
-			}
-
-		default:
-			// not finished...
-			force_close_err <- true
-		}
-		log.Printf("%s: wait for closeing stderr_err\n", debug_tag)
-		close(force_close_err)
-
-		//
-		log.Printf("%s: closed!\n", debug_tag)
-	}()
-
-	// wait for finishing subprocess
-	select {
-	case ps := <-wait_pid_chan:
-		// subprocess has been finished
-		log.Printf("!! CHILD PROCESS IS FINISHED %v", ps)
-
-		if !ps.Success() {
-			return nil, errors.New("Process finished with failed state")
-		}
-
-		result_buf_ch := make(chan []byte)
-		result_err_ch := make(chan error)
-		go func() {
-			log.Printf("%s: waiting a result...\n", debug_tag)
-			result_buf, err := readPipe(result_pipe.ReadFd)
-			if err != nil {
-				result_err_ch <- err
-				return
-			}
-
-			log.Printf("%s: getting a result...\n", debug_tag)
-			result_buf_ch <- result_buf
-			log.Printf("%s: got a result...\n", debug_tag)
-		}()
-
-		select {
-		case result_buf := <-result_buf_ch:
-			result, err := DecodeExecuteResult(result_buf)
-			if err != nil { return nil, err }
-
-			log.Printf("??RESULT!!!!!!! : err => %v", err)
-			log.Printf("  => sec          : %v", result.UsedCPUTimeSec)
-			log.Printf("  => mem          : %v", result.UsedMemoryBytes)
-			log.Printf("  => signal       : %v", result.Signal)
-			log.Printf("  => return code  : %v", result.ReturnCode)
-			log.Printf("  => command      : %v", result.CommandLine)
-			log.Printf("  => status       : %v", result.Status)
-			log.Printf("  => system error : %v", result.SystemErrorMessage)
-
-			if result.Status == 5 {
-				force_quit = true
-			}
-
-			return result, err
-
-		case result_err := <-result_err_ch:
-			return nil, result_err
-
-		case <-time.After(time.Second * 5):
-			log.Printf("%s: Timeout(result)\n", debug_tag)
-			return nil, errors.New("Timeout(result), failed to get a result...")
-		}
-
-	case <-time.After(500 * time.Second):
-		// TODO: fix
-		// will blocking( wait for response at least 500 seconds )
-		log.Printf("%s: TIMEOUT\n", debug_tag)
-		return nil, errors.New("Process timeouted")
+	if !ps.Success() {
+		// if awaho finished with failed state, it denotes host error
+		return nil, errors.New("Process finished with failed state")
 	}
+
+	// read result
+	result, err := func() (*A, error) {
+		select {
+		case res := <-readResultAsync(result_p):
+			return res.result, err
+
+		case <-time.After(time.Second * 2):
+			return nil, errors.New("Timeout")
+		}
+	}()
+	if err != nil {
+		return nil, err
+	}
+
+	stdout_read_err := <-stdout_read_err_ch
+	stderr_read_err := <-stderr_read_err_ch
+
+	executed_result := &ExecutedResult{
+		UsedCPUTimeSec: result.CpuTimeMicroSec / 1e6,	// micro sec to sec
+		UsedMemoryBytes: result.UsedMemoryBytes,
+
+		Status:	Passed,		// TODO: fix
+	}
+
+	log.Printf("terminate", stdout_read_err, stderr_read_err, *result, *executed_result)
+
+	return executed_result, nil
 }
 
-func readPipeAsync(
-	fd int,
-	cs chan<-error,
-	output_fd OutFd,
-	force_close_ch <-chan bool,
-	output_stream chan<-*StreamOutput,
-) {
-	buffer := make([]byte, ReadLength)
-	force_close_f := false
 
-	for {
-		select {
-		case <-force_close_ch:
-			force_close_f = true
-		default:
-		}
 
-		size, err := syscall.Read(fd, buffer)
-		if err != nil {
-			if err == syscall.EAGAIN {
-				continue
-			} else {
-				if ! force_close_f {
-					cs <- err
-				}
+type A struct {
+	Exited				bool
+	ExitStatus			int
+	Signaled			bool
+	Signal				int
 
-				output_stream <- nil
-				return
-			}
-		}
-		if size <= 0 && force_close_f {
-			output_stream <- nil
-			return
-		}
+	SystemTimeMicroSec	float64
+	UserTimeMicroSec	float64
+	CpuTimeMicroSec		float64
 
-		if size > 0 {
-			copied := make([]byte, size)
-			copy(copied, buffer[:size])
+	UsedMemoryBytes		uint64
 
-			output_stream <- &StreamOutput{
-				Fd: output_fd,
-				Buffer: copied,
-			}
-		}
-
-		//
-		// time.Sleep(1 * time.Millisecond)
-	}
-}
-
-func readPipe(fd int) (result []byte, err error) {
-	buffer := make([]byte, ReadLength)
-
-	for {
-		size, err := syscall.Read(fd, buffer)
-		if err != nil {
-			break
-		}
-
-		if size != 0 {
-			result = append(result, buffer[:size]...)
-		} else {
-			break
-		}
-	}
-
-	return
+	SystemErrorStatus	int
+	SystemErrorMessage	string
 }

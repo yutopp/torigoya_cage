@@ -13,10 +13,10 @@ package torigoya
 import(
 	"fmt"
 	"errors"
-	"strconv"
+	_ "strconv"
 	"os"
-	"os/user"
-	"path/filepath"
+	_ "os/user"
+	_ "path/filepath"
     "os/exec"
 )
 
@@ -26,12 +26,9 @@ type PackageUpdater interface {
 
 type Context struct {
 	basePath			string
+	userFilesBasePath	string
 
-	hostUser			*user.User
-
-	sandboxDir			string
-	homeDir				string
-	jailedUserDir		string
+	sandboxExecutor		SandboxExecutor
 
 	procConfPath		string
 	procConfTable		ProcConfigTable
@@ -40,48 +37,76 @@ type Context struct {
 	packageUpdater		PackageUpdater
 }
 
+type MountOption struct {
+	HostPath	string
+	GuestPath	string
+	IsReadOnly	bool
+}
 
-func InitContext(
-	base_path				string,
-	host_user_name			string,
-	proc_config_path		string,
-	proc_src_zip_address	string,
-	package_updater			PackageUpdater,
-) (*Context, error) {
+type CopyOption struct {
+	HostPath	string
+	GuestPath	string
+}
+
+type ResourceLimit struct {
+	Core		uint64	// number
+	Nofile		uint64	// number
+	NProc		uint64	// number
+	MemLock		uint64	// number
+	CpuTime		uint64	// seconds
+	Memory		uint64	// bytes
+	FSize		uint64	// bytes
+}
+
+type SandboxExecutionOption struct {
+	Mounts			[]MountOption
+	Copies			[]CopyOption
+	GuestHomePath	string
+	Limits			*ResourceLimit
+	Args			[]string
+	Envs			[]string
+}
+
+type ExecuteCallBackType	func(*StreamOutput)
+type SandboxExecutor interface {
+	Execute(*SandboxExecutionOption, *os.File, ExecuteCallBackType) (*ExecutedResult, error)
+}
+
+
+
+
+type AwahoSandboxExecutor struct {
+	ExecutablePath		string
+}
+
+
+
+
+type ContextOptions struct {
+	BasePath				string
+	UserFilesBasePath		string
+
+	SandboxExec				SandboxExecutor
+
+	ProcConfigPath			string
+	ProcSrcZipAddress		string
+	PackageUpdater			PackageUpdater
+}
+
+func InitContext(opts *ContextOptions) (*Context, error) {
 	// TODO: change to checking capability
 	expectRoot()
 
-	//
-	sandbox_dir := "/tmp/sandbox"
-
-	//
-	host_user, err := user.Lookup(host_user_name)
-	if err != nil {
-		return nil, err
-	}
-
-	// In posix, Uid only contains numbers
-	host_user_id, _ := strconv.Atoi(host_user.Uid)
-
-	// create SANDBOX Directory, if not existed
-	if !fileExists(sandbox_dir) {
-		err := os.Mkdir(sandbox_dir, os.ModeDir | 0700)
+	// create ~~~ Directory, if not existed
+	if !fileExists(opts.UserFilesBasePath) {
+		err := os.Mkdir(opts.UserFilesBasePath, os.ModeDir | 0700)
 		if err != nil {
-			return nil, errors.New(fmt.Sprintf("Couldn't create directory %s", sandbox_dir))
-		}
-
-		if err := filepath.Walk(sandbox_dir, func(path string, info os.FileInfo, err error) error {
-			if err != nil { return err }
-			// r-x/---/---
-			err = guardPath(path, host_user_id, host_user_id, 0500)
-			return err
-		}); err != nil {
-			return nil, errors.New(fmt.Sprintf("Couldn't create directory %s", sandbox_dir))
+			return nil, errors.New(fmt.Sprintf("Couldn't create directory %s", opts.UserFilesBasePath))
 		}
 	}
 
 	// LoadProcConfigTable
-	proc_conf_table, err := LoadProcConfigs(proc_config_path)
+	proc_conf_table, err := LoadProcConfigs(opts.ProcConfigPath)
 	if err != nil {
 		// make no error if table coulnd't be loaded
 		proc_conf_table = nil
@@ -89,15 +114,15 @@ func InitContext(
 
 	//
 	return &Context{
-		basePath:			base_path,
-		hostUser:			host_user,
-		sandboxDir:			sandbox_dir,
-		homeDir:			"home",
-		jailedUserDir:		"home/torigoya",
-		procConfPath:		proc_config_path,
+		basePath:			opts.BasePath,
+		userFilesBasePath:	opts.UserFilesBasePath,
+
+		sandboxExecutor:	opts.SandboxExec,
+
+		procConfPath:		opts.ProcConfigPath,
 		procConfTable:		proc_conf_table,
-		procSrcZipAddress:	proc_src_zip_address,
-		packageUpdater:		package_updater,
+		procSrcZipAddress:	opts.ProcSrcZipAddress,
+		packageUpdater:		opts.PackageUpdater,
 	}, nil
 }
 

@@ -17,10 +17,10 @@ import (
 	"strconv"
 	"bytes"
 
-	"sync"
+	//"sync"
 )
 
-
+/*
 func TestCreateTarget(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
@@ -218,7 +218,7 @@ func TestCreateInput(t *testing.T) {
 }
 
 
-/*
+
 func TestInvokeProcessClonerBase(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	err := invokeProcessClonerBase(filepath.Join(gopath, "bin"), "process_cloner", nil)
@@ -227,7 +227,7 @@ func TestInvokeProcessClonerBase(t *testing.T) {
 		return
 	}
 }
-*/
+
 
 
 func TestBootStrap(t *testing.T) {
@@ -238,7 +238,7 @@ func TestBootStrap(t *testing.T) {
 	}
 }
 
-/*
+
 func TestExec(t *testing.T) {
 	limit := &ResourceLimit{
 		CPU: 10,		// CPU can be used only cpu_limit_time(sec)
@@ -255,7 +255,6 @@ func TestExec(t *testing.T) {
 	t.Fatalf("ababa")
 }
 
-*/
 
 
 
@@ -308,11 +307,27 @@ int main() {
 	}
 }
 
+*/
 
-
-func TestTicketBasic(t *testing.T) {
+func TestTicketBasicUnit(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+
+	executor := &AwahoSandboxExecutor{
+		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
+	}
+
+	ctx_opt := &ContextOptions{
+		BasePath: gopath,
+		UserFilesBasePath: "/tmp/hogehoge",
+
+		SandboxExec: executor,
+
+		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
+		ProcSrcZipAddress: "",
+		PackageUpdater: nil,
+	}
+
+	ctx, err := InitContext(ctx_opt)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -342,10 +357,16 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs: []string{},
 			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
 			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
@@ -357,6 +378,8 @@ int main() {
 			Input{
 				stdin: nil,
 				setting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
 					CpuTimeLimit: 10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
@@ -369,6 +392,8 @@ int main() {
 					false,
 				},
 				setting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
 					CpuTimeLimit: 10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
@@ -379,8 +404,6 @@ int main() {
 	//
 	ticket := &Ticket{
 		BaseName: base_name,
-		ProcId: 0,
-		ProcVersion: "test",
 		Sources: sources,
 		BuildInst: build_inst,
 		RunInst: run_inst,
@@ -400,8 +423,14 @@ int main() {
 	//
 	expect_result := test_result{
 		compile: test_result_unit{
+			result: &ExecutedResult{
+				Status: Passed,
+			},
 		},
 		link: test_result_unit{
+			result: &ExecutedResult{
+				Status: Passed,
+			},
 		},
 		run: map[int]*test_result_unit{
 			0: &test_result_unit{
@@ -417,7 +446,7 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 
-
+/*
 func TestTicketBasicParallel1(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
 	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
@@ -1048,7 +1077,6 @@ int main() {
 	//
 	assertTestResult(t, &result, &expect_result)
 }
-*/
 
 
 func TestTicketRepeat(t *testing.T) {
@@ -1146,7 +1174,7 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 
-
+*/
 // ==================================================
 // ==================================================
 //
@@ -1164,7 +1192,7 @@ func assertTestResult(t *testing.T, result, expect *test_result) {
 			}
 
 		} else {
-			// t.Logf("[SKIPPED: %s / result]", tag)
+			t.Logf("[SKIPPED: %s / result]", tag)
 		}
 
 		if expect.out != nil {
@@ -1176,7 +1204,7 @@ func assertTestResult(t *testing.T, result, expect *test_result) {
 			}
 
 		} else {
-			// t.Logf("[SKIPPED: %s / out]", tag)
+			t.Logf("[SKIPPED: %s / out]", tag)
 		}
 
 		if expect.err != nil {
@@ -1188,7 +1216,7 @@ func assertTestResult(t *testing.T, result, expect *test_result) {
 			}
 
 		} else {
-			// t.Logf("[SKIPPED: %s / err]", tag)
+			t.Logf("[SKIPPED: %s / err]", tag)
 		}
 	}
 
@@ -1234,6 +1262,8 @@ func makeHelperCallback(result *test_result) func(v interface{}) {
 			case RunMode:
 				if result.run[r.Index] == nil { result.run[r.Index] = &test_result_unit{} }
 				result.run[r.Index].result = r.Result
+			default:
+				panic("unsupported mode.")
 			}
 
 		case *StreamOutputResult:
@@ -1245,6 +1275,8 @@ func makeHelperCallback(result *test_result) func(v interface{}) {
 					result.compile.out = append(result.compile.out, r.Output.Buffer...)
 				case StderrFd:
 					result.compile.err = append(result.compile.err, r.Output.Buffer...)
+				default:
+					panic("unsupported fd.")
 				}
 
 			case LinkMode:
@@ -1253,6 +1285,8 @@ func makeHelperCallback(result *test_result) func(v interface{}) {
 					result.link.out = append(result.link.out, r.Output.Buffer...)
 				case StderrFd:
 					result.link.err = append(result.link.err, r.Output.Buffer...)
+				default:
+					panic("unsupported fd.")
 				}
 
 			case RunMode:
@@ -1262,11 +1296,16 @@ func makeHelperCallback(result *test_result) func(v interface{}) {
 					result.run[r.Index].out = append(result.run[r.Index].out, r.Output.Buffer...)
 				case StderrFd:
 					result.run[r.Index].err = append(result.run[r.Index].err, r.Output.Buffer...)
+				default:
+					panic("unsupported fd.")
 				}
+
+			default:
+				panic("unsupported mode.")
 			}
 
 		default:
-			panic("unsupported type.");
+			panic("unsupported type.")
 		}
 	}
 }
