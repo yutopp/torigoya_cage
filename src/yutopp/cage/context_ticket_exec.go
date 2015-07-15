@@ -15,6 +15,7 @@ import(
 	"fmt"
 	"errors"
 	"os"
+	"sync"
 	"io/ioutil"
 
 	"github.com/jmcvetta/randutil"
@@ -143,22 +144,31 @@ func (ctx *Context) execManagedRun(
 	defer log.Printf("$$$$$$$$$$ FINISH run => %s\n", path_used_as_home)
 
 	//
+	wg := new(sync.WaitGroup)
+	m := new(sync.Mutex)
 	var errs []error = nil
-	// ========================================
-	for index, input := range run_inst.Inputs {
-		// TODO: async
-		err := ctx.invokeRunCommand(
-			path_used_as_home,
-			index,
-			&input,
-			callback,
-		)
 
-		if err != nil {
-			if errs == nil { errs = make([]error, 0) }
-			errs = append(errs, err)
-		}
+	// execute inputs async
+	for _index, _input := range run_inst.Inputs {
+		wg.Add(1)
+
+		go func(index int, input Input) {
+			defer wg.Done()
+
+			if err := ctx.invokeRunCommand(
+				path_used_as_home,
+				index,
+				&input,
+				callback,
+			); err != nil {
+				m.Lock()
+				if errs == nil { errs = make([]error, 0) }
+				errs = append(errs, err)
+				m.Unlock()
+			}
+		}(_index, _input)
 	}
+	wg.Wait()
 
 	return errs
 }
@@ -320,11 +330,10 @@ func (ctx *Context) invokeRunCommand(
 	}
 
 	opts := &SandboxExecutionOption{
-		Mounts:	[]MountOption{
-			MountOption{
+		Copies:	[]CopyOption{	// NOTE: NOT "Mount", to run async
+			CopyOption{
 				HostPath: path_used_as_home,
 				GuestPath: guestHome,
-				IsReadOnly: false,
 			},
 		},
 		GuestHomePath: guestHome,

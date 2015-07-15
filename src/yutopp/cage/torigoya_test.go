@@ -14,6 +14,8 @@ import (
 	"fmt"
 	"path/filepath"
 	"bytes"
+	"sync"
+	"strconv"
 )
 
 
@@ -78,87 +80,7 @@ func TestCreateTargetRepeat(t *testing.T) {
 
 
 
-func TestReassignTarget(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
-	if err != nil {
-		t.Errorf(err.Error())
-		return
-	}
 
-	base_name := "aaa2" + strconv.FormatInt(time.Now().Unix(), 10)
-	content := &TextContent{
-		"prog.cpp",
-		[]byte("test test test"),
-	}
-	user_id := 1000
-	group_id := 1000
-
-	ctx.createTarget(base_name, user_id, group_id, content)
-
-	user_dir_path, _, err := ctx.reassignTarget(
-		base_name,
-		user_id,
-		group_id,
-		func(s string) (*string, error) { return nil, nil },
-	)
-	if err != nil {
-		t.Errorf(err.Error())
-		return
-	}
-
-	//
-	t.Logf("user dir path: %s", user_dir_path)
-	if user_dir_path != filepath.Join(ctx.sandboxDir, base_name) {
-		t.Errorf(fmt.Sprintf("%s", user_dir_path))
-		return
-	}
-}
-
-
-func TestReassignTarget2(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
-	if err != nil {
-		t.Errorf(err.Error())
-		return
-	}
-
-	base_name := "aaa2" + strconv.FormatInt(time.Now().Unix(), 10)
-	content := &TextContent{
-		"prog.cpp",
-		[]byte("test test test"),
-	}
-	user_id := 1000
-	group_id := 1000
-
-	ctx.createTarget(base_name, user_id, group_id, content)
-
-	user_dir_path, _, err := ctx.reassignTarget(
-		base_name,
-		user_id,
-		group_id,
-		func(s string) (*string, error) { return nil, nil },
-	)
-	if err != nil {
-		t.Errorf(err.Error())
-		return
-	}
-
-	//
-	t.Logf("user dir path: %s", user_dir_path)
-	if user_dir_path != filepath.Join(ctx.sandboxDir, base_name) {
-		t.Errorf(fmt.Sprintf("%s", user_dir_path))
-		return
-	}
-
-
-	_, _, err = ctx.reassignTarget(base_name, user_id, group_id, func(s string) (*string, error) { return nil, nil })
-	if err != nil {
-		t.Errorf(err.Error())
-		return
-	}
-}
 
 
 func TestCreateInput(t *testing.T) {
@@ -214,48 +136,6 @@ func TestCreateInput(t *testing.T) {
 	}
 
 }
-
-
-
-func TestInvokeProcessClonerBase(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-	err := invokeProcessClonerBase(filepath.Join(gopath, "bin"), "process_cloner", nil)
-	if err != nil {
-		t.Errorf(err.Error())
-		return
-	}
-}
-
-
-
-func TestBootStrap(t *testing.T) {
-	err := runAsManagedUser(nil)
-	if err != nil {
-		t.Errorf("TestBootStrap" + err.Error())
-		return
-	}
-}
-
-
-func TestExec(t *testing.T) {
-	limit := &ResourceLimit{
-		CPU: 10,		// CPU can be used only cpu_limit_time(sec)
-		AS: 1 * 1024 * 1024 * 1024,		// Memory can be used only memory_limit_bytes
-		FSize: 5 * 1024 * 1024,				// Process can writes a file only 5 MBytes
-	}
-
-
-	err := execc(limit, "ls", []string{}, map[string]string{"PATH": "/bin"})
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-
-	t.Fatalf("ababa")
-}
-
-
-
-
 
 func TestInvokeBuild(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
@@ -451,16 +331,138 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 
-/*
 func TestTicketBasicParallel1(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+
+	executor := &AwahoSandboxExecutor{
+		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
+	}
+
+	ctx_opt := &ContextOptions{
+		BasePath: gopath,
+		UserFilesBasePath: "/tmp/hogehoge",
+
+		SandboxExec: executor,
+
+		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
+		ProcSrcZipAddress: "",
+		PackageUpdater: nil,
+	}
+
+	ctx, err := InitContext(ctx_opt)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
 	}
 
-	var wg sync.WaitGroup
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
+#include <iostream>
+
+int main() {
+	std::cout << "hello!" << std::endl;
+	int i;
+	std::cin >> i;
+	std::cout << "input is " << i << std::endl;
+}
+`),
+			false,
+		},
+	}
+
+	//
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs: []string{},
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+	}
+
+	//
+	run_inst := &RunInstruction{
+		Inputs: []Input{
+			Input{
+				Stdin: nil,
+				RunSetting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
+
+			Input{
+				Stdin: &SourceData{
+					"hoge.in",
+					[]byte("100"),
+					false,
+				},
+				RunSetting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
+		},
+	}
+
+	//
+	ticket := &Ticket{
+		BaseName: "",
+		Sources: sources,
+		BuildInst: build_inst,
+		RunInst: run_inst,
+	}
+
+	//
+	expect_result := testExpectResult{
+		compile: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
+		},
+		link: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
+		},
+		run: map[int]*testExpectResultUnit{
+			0: &testExpectResultUnit{
+				out: []byte("hello!\ninput is 0\n"),
+				status: &testExpectStatus{
+					exited: BoolOpt(true),
+					exitStatus: IntOpt(0),
+				},
+			},
+			1: &testExpectResultUnit{
+				out: []byte("hello!\ninput is 100\n"),
+				status: &testExpectStatus{
+					exited: BoolOpt(true),
+					exitStatus: IntOpt(0),
+				},
+			},
+		},
+	}
+
+	// run in parallel
+	wg := new(sync.WaitGroup)
+	m := new(sync.Mutex)
 	const num = 16
 	var fx [num]bool
 	for i := 0; i < num; i++ {
@@ -469,19 +471,61 @@ func TestTicketBasicParallel1(t *testing.T) {
 		go func(no int) {
 			defer func() {
 				fmt.Printf("Done! %d\n", no)
-				fx[no] = true
+
 				fmt.Printf("fs! %v\n", fx)
 				wg.Done()
 			}()
 
-			//
-			base_name := "paralell1_no_" + strconv.Itoa(no) + "_" + strconv.FormatInt(time.Now().Unix(), 10)
+			// execute
+			var result test_result
+			result.run = make(map[int]*test_result_unit)
+			f := makeHelperCallback(&result)
+			if err := ctx.ExecTicket(ticket, f); err != nil {
+				t.Errorf(err.Error())
+				return
+			}
 
-			//
-			sources := []*SourceData{
-				&SourceData{
-					"prog.cpp",
-					[]byte(`
+			t.Logf("%V", result)
+			assertTestResult(t, &result, &expect_result)
+
+			m.Lock()
+			fx[no] = true	// succeeded
+			m.Unlock()
+		}(i)
+	}
+
+	wg.Wait()
+}
+
+func TestTicketBasicParallel2(t *testing.T) {
+	gopath := os.Getenv("GOPATH")
+
+	executor := &AwahoSandboxExecutor{
+		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
+	}
+
+	ctx_opt := &ContextOptions{
+		BasePath: gopath,
+		UserFilesBasePath: "/tmp/hogehoge",
+
+		SandboxExec: executor,
+
+		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
+		ProcSrcZipAddress: "",
+		PackageUpdater: nil,
+	}
+
+	ctx, err := InitContext(ctx_opt)
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
 #include <iostream>
 
 int main() {
@@ -491,105 +535,33 @@ int main() {
 	std::cout << "input is " << i << std::endl;
 }
 `),
-					false,
-				},
-			}
-
-			//
-			build_inst := &BuildInstruction{
-				CompileSetting: &ExecutionSetting{
-					CpuTimeLimit: 10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
-				LinkSetting: &ExecutionSetting{
-					CpuTimeLimit: 10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
-			}
-
-			//
-			run_inst := &RunInstruction{
-				Inputs: []Input{
-					Input{
-						stdin: nil,
-						setting: &ExecutionSetting{
-							CpuTimeLimit: 10,
-							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-						},
-					},
-
-					Input{
-						stdin: &SourceData{
-							"hoge.in",
-							[]byte("100"),
-							false,
-						},
-						setting: &ExecutionSetting{
-							CpuTimeLimit: 10,
-							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-						},
-					},
-				},
-			}
-
-			//
-			ticket := &Ticket{
-				BaseName: base_name,
-				ProcId: 0,
-				ProcVersion: "test",
-				Sources: sources,
-				BuildInst: build_inst,
-				RunInst: run_inst,
-			}
-
-			// execute
-			var result test_result
-			result.run = make(map[int]*test_result_unit)
-
-			f := makeHelperCallback(&result)
-			if err := ctx.ExecTicket(ticket, f); err != nil {
-				t.Logf("%d =====\n", no)
-				t.Errorf(err.Error())
-				return
-			}
-
-			//
-			expect_result := test_result{
-				compile: test_result_unit{
-				},
-				link: test_result_unit{
-				},
-				run: map[int]*test_result_unit{
-					0: &test_result_unit{
-						out: []byte("hello!\ninput is 0\n"),
-					},
-					1: &test_result_unit{
-						out: []byte("hello!\ninput is 100\n"),
-					},
-				},
-			}
-
-			//
-			t.Logf("%d =====\n", no)
-			t.Logf("%V\n", result)
-			assertTestResult(t, &result, &expect_result)
-		}(i)
+			false,
+		},
 	}
 
-	wg.Wait()
-}
-
-
-func TestTicketBasicParallel2(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
-	if err != nil {
-		t.Errorf(err.Error())
-		return
+	//
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs: []string{},
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
 	}
 
-	var wg sync.WaitGroup
-	const num = 30
+
+	// run in parallel
+	wg := new(sync.WaitGroup)
+	m := new(sync.Mutex)
+	const num = 30	// More!
 	var fx [num]bool
 	for i := 0; i < num; i++ {
 		wg.Add(1)
@@ -597,64 +569,21 @@ func TestTicketBasicParallel2(t *testing.T) {
 		go func(no int) {
 			defer func() {
 				fmt.Printf("Done! %d\n", no)
-				fx[no] = true
+
 				fmt.Printf("fs! %v\n", fx)
 				wg.Done()
 			}()
 
 			//
-			base_name := "paralell2_no_" + strconv.Itoa(no) + "_" + strconv.FormatInt(time.Now().Unix(), 10)
-
-			//
-			sources := []*SourceData{
-				&SourceData{
-					"prog.cpp",
-					[]byte(`
-#include <iostream>
-#include <unistd.h>
-
-int main() {
-	std::cout << "hello!" << std::endl;
-	int i;
-	std::cin >> i;
-	usleep(200000); // 0.2 sec
-	std::cout << "input is " << i << std::endl;
-}
-`),
-					false,
-				},
-			}
-
-			//
-			build_inst := &BuildInstruction{
-				CompileSetting: &ExecutionSetting{
-					CpuTimeLimit: 10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
-				LinkSetting: &ExecutionSetting{
-					CpuTimeLimit: 10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
-			}
-
-			//
 			run_inst := &RunInstruction{
 				Inputs: []Input{
 					Input{
-						stdin: nil,
-						setting: &ExecutionSetting{
-							CpuTimeLimit: 10,
-							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+						Stdin: &SourceData{
+							Data: []byte(strconv.Itoa(no)),
 						},
-					},
-
-					Input{
-						stdin: &SourceData{
-							"hoge.in",
-							[]byte("100"),
-							false,
-						},
-						setting: &ExecutionSetting{
+						RunSetting: &ExecutionSetting{
+							Args: []string{"./prog.out"},
+							Envs: []string{},
 							CpuTimeLimit: 10,
 							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 						},
@@ -664,12 +593,35 @@ int main() {
 
 			//
 			ticket := &Ticket{
-				BaseName: base_name,
-				ProcId: 0,
-				ProcVersion: "test",
+				BaseName: "",
 				Sources: sources,
 				BuildInst: build_inst,
 				RunInst: run_inst,
+			}
+
+			//
+			expect_result := testExpectResult{
+				compile: testExpectResultUnit{
+					status: &testExpectStatus{
+						exited: BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectResultUnit{
+					status: &testExpectStatus{
+						exited: BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: map[int]*testExpectResultUnit{
+					0: &testExpectResultUnit{
+						out: []byte(fmt.Sprintf("hello!\ninput is %d\n", no)),
+						status: &testExpectStatus{
+							exited: BoolOpt(true),
+							exitStatus: IntOpt(0),
+						},
+					},
+				},
 			}
 
 			// execute
@@ -677,49 +629,45 @@ int main() {
 			result.run = make(map[int]*test_result_unit)
 			f := makeHelperCallback(&result)
 			if err := ctx.ExecTicket(ticket, f); err != nil {
-				t.Logf("%d =====\n", no)
 				t.Errorf(err.Error())
 				return
 			}
 
-			//
-			expect_result := test_result{
-				compile: test_result_unit{
-				},
-				link: test_result_unit{
-				},
-				run: map[int]*test_result_unit{
-					0: &test_result_unit{
-						out: []byte("hello!\ninput is 0\n"),
-					},
-					1: &test_result_unit{
-						out: []byte("hello!\ninput is 100\n"),
-					},
-				},
-			}
-
-			//
-			t.Logf("%d =====\n", no)
-			t.Logf("%V\n", result)
+			t.Logf("%V", result)
 			assertTestResult(t, &result, &expect_result)
+
+			m.Lock()
+			fx[no] = true	// succeeded
+			m.Unlock()
 		}(i)
 	}
 
 	wg.Wait()
 }
 
-
-
 func TestTicketTLE(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+
+	executor := &AwahoSandboxExecutor{
+		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
+	}
+
+	ctx_opt := &ContextOptions{
+		BasePath: gopath,
+		UserFilesBasePath: "/tmp/hogehoge",
+
+		SandboxExec: executor,
+
+		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
+		ProcSrcZipAddress: "",
+		PackageUpdater: nil,
+	}
+
+	ctx, err := InitContext(ctx_opt)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
 	}
-
-	//
-	base_name := "aaa7" + strconv.FormatInt(time.Now().Unix(), 10)
 
 	//
 	sources := []*SourceData{
@@ -739,11 +687,17 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
+			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs: []string{},
+			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
+			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
+			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -752,8 +706,10 @@ int main() {
 	run_inst := &RunInstruction{
 		Inputs: []Input{
 			Input{
-				stdin: nil,
-				setting: &ExecutionSetting{
+				Stdin: nil,
+				RunSetting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
 					CpuTimeLimit: 1,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
@@ -763,9 +719,7 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: base_name,
-		ProcId: 0,
-		ProcVersion: "test",
+		BaseName: "",
 		Sources: sources,
 		BuildInst: build_inst,
 		RunInst: run_inst,
@@ -783,15 +737,23 @@ int main() {
 	t.Logf("%V", result)
 
 	//
-	expect_result := test_result{
-		compile: test_result_unit{
+	expect_result := testExpectResult{
+		compile: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
 		},
-		link: test_result_unit{
+		link: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
 		},
-		run: map[int]*test_result_unit{
-			0: &test_result_unit{
-				result: &ExecutedResult {
-					Status: CPULimit,
+		run: map[int]*testExpectResultUnit{
+			0: &testExpectResultUnit{
+				status: &testExpectStatus{
+					exited: BoolOpt(false),		// killed
 				},
 			},
 		},
@@ -801,114 +763,29 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 
-
-func TestTicketTLEWithHandling(t *testing.T) {
+func TestTicketSleepTLE(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+
+	executor := &AwahoSandboxExecutor{
+		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
+	}
+
+	ctx_opt := &ContextOptions{
+		BasePath: gopath,
+		UserFilesBasePath: "/tmp/hogehoge",
+
+		SandboxExec: executor,
+
+		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
+		ProcSrcZipAddress: "",
+		PackageUpdater: nil,
+	}
+
+	ctx, err := InitContext(ctx_opt)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
 	}
-
-	//
-	base_name := "tle_with_handling" + strconv.FormatInt(time.Now().Unix(), 10)
-
-	//
-	sources := []*SourceData{
-		&SourceData{
-			"prog.cpp",
-			[]byte(`
-#include <iostream>
-#include <signal.h>
-
-void foo(int _unused)
-{}
-
-int main() {
-	signal(SIGXCPU, foo);
-	for(;;);
-}
-`),
-			false,
-		},
-	}
-
-	//
-	build_inst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
-
-	//
-	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				stdin: nil,
-				setting: &ExecutionSetting{
-					CpuTimeLimit: 1,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
-			},
-		},
-	}
-
-	//
-	ticket := &Ticket{
-		BaseName: base_name,
-		ProcId: 0,
-		ProcVersion: "test",
-		Sources: sources,
-		BuildInst: build_inst,
-		RunInst: run_inst,
-	}
-
-	// execute
-	var result test_result
-	result.run = make(map[int]*test_result_unit)
-	f := makeHelperCallback(&result)
-	if err := ctx.ExecTicket(ticket, f); err != nil {
-		t.Errorf(err.Error())
-		return
-	}
-
-	t.Logf("%V", result)
-
-	//
-	expect_result := test_result{
-		compile: test_result_unit{
-		},
-		link: test_result_unit{
-		},
-		run: map[int]*test_result_unit{
-			0: &test_result_unit{
-				result: &ExecutedResult {
-					Status: CPULimit,
-				},
-			},
-		},
-	}
-
-	//
-	assertTestResult(t, &result, &expect_result)
-}
-
-
-func TestTicketTLEWithSleep(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
-	if err != nil {
-		t.Errorf(err.Error())
-		return
-	}
-
-	//
-	base_name := "tle_with_sleep" + strconv.FormatInt(time.Now().Unix(), 10)
 
 	//
 	sources := []*SourceData{
@@ -928,11 +805,17 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
+			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs: []string{},
+			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
+			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
+			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -941,8 +824,10 @@ int main() {
 	run_inst := &RunInstruction{
 		Inputs: []Input{
 			Input{
-				stdin: nil,
-				setting: &ExecutionSetting{
+				Stdin: nil,
+				RunSetting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
 					CpuTimeLimit: 1,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
@@ -952,9 +837,7 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: base_name,
-		ProcId: 0,
-		ProcVersion: "test",
+		BaseName: "",
 		Sources: sources,
 		BuildInst: build_inst,
 		RunInst: run_inst,
@@ -972,15 +855,23 @@ int main() {
 	t.Logf("%V", result)
 
 	//
-	expect_result := test_result{
-		compile: test_result_unit{
+	expect_result := testExpectResult{
+		compile: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
 		},
-		link: test_result_unit{
+		link: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
 		},
-		run: map[int]*test_result_unit{
-			0: &test_result_unit{
-				result: &ExecutedResult {
-					Status: Error,
+		run: map[int]*testExpectResultUnit{
+			0: &testExpectResultUnit{
+				status: &testExpectStatus{
+					exited: BoolOpt(false),		// killed
 				},
 			},
 		},
@@ -990,18 +881,29 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 
-
-/*
 func TestTicketMLE(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+
+	executor := &AwahoSandboxExecutor{
+		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
+	}
+
+	ctx_opt := &ContextOptions{
+		BasePath: gopath,
+		UserFilesBasePath: "/tmp/hogehoge",
+
+		SandboxExec: executor,
+
+		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
+		ProcSrcZipAddress: "",
+		PackageUpdater: nil,
+	}
+
+	ctx, err := InitContext(ctx_opt)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
 	}
-
-	//
-	base_name := "mle" + strconv.FormatInt(time.Now().Unix(), 10)
 
 	//
 	sources := []*SourceData{
@@ -1011,7 +913,12 @@ func TestTicketMLE(t *testing.T) {
 #include <iostream>
 
 int main() {
+	std::size_t s;
+	std::cin >> s;
 
+	char* buffer = new char[s]{};
+	std::cout << "allocated: " << s << std::endl;
+	buffer[s-1] = 'A';
 }
 `),
 			false,
@@ -1021,11 +928,17 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
+			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs: []string{},
+			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
+			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
+			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -1034,10 +947,14 @@ int main() {
 	run_inst := &RunInstruction{
 		Inputs: []Input{
 			Input{
-				stdin: nil,
-				setting: &ExecutionSetting{
+				Stdin: &SourceData{
+					Data: []byte("300000000"),	// 300MB
+				},
+				RunSetting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
 					CpuTimeLimit: 1,
-					MemoryBytesLimit: 3 * 1024 * 1024,
+					MemoryBytesLimit: 200 * 1024 * 1024,	// 200MB
 				},
 			},
 		},
@@ -1045,9 +962,7 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: base_name,
-		ProcId: 0,
-		ProcVersion: "test",
+		BaseName: "",
 		Sources: sources,
 		BuildInst: build_inst,
 		RunInst: run_inst,
@@ -1065,15 +980,23 @@ int main() {
 	t.Logf("%V", result)
 
 	//
-	expect_result := test_result{
-		compile: test_result_unit{
+	expect_result := testExpectResult{
+		compile: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
 		},
-		link: test_result_unit{
+		link: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
 		},
-		run: map[int]*test_result_unit{
-			0: &test_result_unit{
-				result: &ExecutedResult {
-					Status: CPULimit,
+		run: map[int]*testExpectResultUnit{
+			0: &testExpectResultUnit{
+				status: &testExpectStatus{
+					exited: BoolOpt(false),		// killed
 				},
 			},
 		},
@@ -1083,17 +1006,29 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 
-
 func TestTicketRepeat(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
-	ctx, err := InitContext(gopath, "root", filepath.Join(gopath, "files", "proc_profiles_for_core_test"), "", nil)
+
+	executor := &AwahoSandboxExecutor{
+		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
+	}
+
+	ctx_opt := &ContextOptions{
+		BasePath: gopath,
+		UserFilesBasePath: "/tmp/hogehoge",
+
+		SandboxExec: executor,
+
+		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
+		ProcSrcZipAddress: "",
+		PackageUpdater: nil,
+	}
+
+	ctx, err := InitContext(ctx_opt)
 	if err != nil {
 		t.Errorf(err.Error())
 		return
 	}
-
-	//
-	base_name := "aaa8" + strconv.FormatInt(time.Now().Unix(), 10)
 
 	//
 	sources := []*SourceData{
@@ -1103,7 +1038,9 @@ func TestTicketRepeat(t *testing.T) {
 #include <iostream>
 
 int main() {
-	for(int i=0; i<200000; ++i) std::cout << i << "\n" << std::flush;
+	for(int i=0; i<100000; ++i) {
+		std::cout << i << "\n" << std::flush;
+	}
 }
 `),
 			false,
@@ -1113,11 +1050,17 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
+			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs: []string{},
+			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
-			CpuTimeLimit: 3,
+			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
+			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -1126,8 +1069,10 @@ int main() {
 	run_inst := &RunInstruction{
 		Inputs: []Input{
 			Input{
-				stdin: nil,
-				setting: &ExecutionSetting{
+				Stdin: nil,
+				RunSetting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
 					CpuTimeLimit: 10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
@@ -1137,9 +1082,7 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: base_name,
-		ProcId: 0,
-		ProcVersion: "test",
+		BaseName: "",
 		Sources: sources,
 		BuildInst: build_inst,
 		RunInst: run_inst,
@@ -1154,22 +1097,31 @@ int main() {
 		return
 	}
 
-	//
-	out := []byte{}
-	for i:=0; i<200000; i++ {
-		out = append(out, fmt.Sprintf("%d\n", i)...)
+	expect_out := []byte{}
+	for i:=0; i<100000; i++ {
+		expect_out = append(expect_out, fmt.Sprintf("%d\n", i)...)
 	}
 
-	expect_result := test_result{
-		compile: test_result_unit{
+	//
+	expect_result := testExpectResult{
+		compile: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
 		},
-		link: test_result_unit{
+		link: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
 		},
-		run: map[int]*test_result_unit{
-			0: &test_result_unit{
-				out: out,
-				result: &ExecutedResult {
-					Status: Passed,
+		run: map[int]*testExpectResultUnit{
+			0: &testExpectResultUnit{
+				out: expect_out,
+				status: &testExpectStatus{
+					exited: BoolOpt(true),
+					exitStatus: IntOpt(0),
 				},
 			},
 		},
@@ -1179,7 +1131,7 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 
-*/
+
 // ==================================================
 // ==================================================
 //
