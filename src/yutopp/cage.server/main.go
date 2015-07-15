@@ -106,6 +106,7 @@ func main() {
 		UserFilesBasePath: filepath.Join(cwd, "fugafugafuga"),
 
 		SandboxExec: &torigoya.AwahoSandboxExecutor{
+			ExecutablePath: "/home/yutopp/repo/awaho/awaho",
 		},
 
 		ProcConfigPath: target_config.LangProcConfigDir,
@@ -149,7 +150,7 @@ func main() {
 	e := make(chan error)
 	go func() {
 		if err := <- e; err != nil {
-			log.Panicf("Error (%v)\n", err)
+			log.Panicf("Server error: %v\n", err)
 		}
 		log.Printf("Server starts!\n")
 	}()

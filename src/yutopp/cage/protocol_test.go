@@ -9,15 +9,15 @@
 package torigoya
 
 import (
-	"testing"
+	_ "testing"
 	_ "net"
 	_ "os"
-	"fmt"
+	_ "fmt"
 	_ "path/filepath"
 	_ "time"
 	_ "strconv"
 
-	"github.com/ugorji/go/codec"
+	_ "github.com/ugorji/go/codec"
 )
 
 
@@ -136,25 +136,3 @@ int main() {
 	}
 }
 */
-
-func TestProtocolReadTicketFromPackedData(t *testing.T) {
-	// packed data
-	buffer := []byte{ 150, 163, 97, 97, 97, 0, 165, 48, 46, 48, 46, 48, 145, 147, 168, 112, 114, 111, 103, 46, 99, 112, 112, 163, 97, 97, 97, 194, 146, 148, 160, 145, 146, 161, 97, 161, 98, 10, 206, 32, 0, 0, 0, 148, 160, 145, 146, 161, 97, 161, 98, 10, 206, 32, 0, 0, 0, 145, 145, 146, 192, 148, 160, 145, 146, 161, 97, 161, 98, 10, 206, 32, 0, 0, 0 }
-
-	// decode
-	var data interface{}
-	dec := codec.NewDecoderBytes(buffer, &msgPackHandler)
-	if err := dec.Decode(&data); err != nil {
-		t.Fatalf(err.Error())
-	}
-	fmt.Printf("data %V\n", data)
-
-	// construct
-	ticker, err := MakeTicketFromTuple(data)
-	if err != nil {
-		t.Fatalf(err.Error())
-	}
-	fmt.Printf("data %V\n", ticker)
-
-	//
-}

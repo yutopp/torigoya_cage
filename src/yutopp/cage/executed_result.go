@@ -8,61 +8,41 @@
 
 package torigoya
 
-import(
-	"syscall"
-
-	"github.com/ugorji/go/codec"
-)
-
-
-// Status of Result
-type ExecutedStatus		int
+type OutFd		int
 const (
-    MemoryLimit		= ExecutedStatus(1)
-    CPULimit		= ExecutedStatus(2)
-    OutputLimit		= ExecutedStatus(22)
-    Error			= ExecutedStatus(3)
-    InvalidCommand	= ExecutedStatus(31)
-    Passed			= ExecutedStatus(4)
-    UnexpectedError	= ExecutedStatus(5)
+	StdoutFd = OutFd(0)
+	StderrFd = OutFd(1)
 )
+type StreamOutput struct {
+	Fd			OutFd		`codec:"fd"`
+	Buffer		[]byte		`codec:"buffer"`
+}
 
-//
+type StreamOutputResult struct {
+	Mode		int					`codec:"mode"`
+	Index		int					`codec:"index"`
+	Output		*StreamOutput		`codec:"output"`
+}
+
+type StreamExecutedResult struct {
+	Mode		int					`codec:"mode"`
+	Index		int					`codec:"index"`
+	Result		*ExecutedResult		`codec:"result"`
+}
+
 type ExecutedResult struct {
-	UsedCPUTimeSec		float64
-	UsedMemoryBytes		uint64
-	Signal				*syscall.Signal
-	ReturnCode			int
-	CommandLine			string
-	Status				ExecutedStatus
-	SystemErrorMessage	string
+	Exited				bool		`codec:"exited"`
+	ExitStatus			int			`codec:"exit_status"`
+	Signaled			bool		`codec:"signaled"`
+	Signal				int			`codec:"signal"`
+
+	UsedCPUTimeSec		float64		`codec:"used_cpu_time_sec"`
+	UsedMemoryBytes		uint64		`codec:"used_memory_bytes"`
+
+	SystemErrorStatus	int			`codec:"system_error_status"`
+	SystemErrorMessage	string		`codec:"system_error_message"`
 }
 
-func (bm *ExecutedResult) IsFailed() bool {
-	return bm.Status != Passed;
-}
-
-//
-func (bm *ExecutedResult) Encode() ([]byte, error) {
-	var msgpack_bytes []byte
-	enc := codec.NewEncoderBytes(&msgpack_bytes, &msgPackHandler)
-	if err := enc.Encode(*bm); err != nil {
-		return nil, err
-	}
-	return msgpack_bytes, nil
-}
-
-func DecodeExecuteResult(base []byte) (*ExecutedResult, error) {
-	bm := &ExecutedResult{}
-	dec := codec.NewDecoderBytes(base, &msgPackHandler)
-	if err := dec.Decode(bm); err != nil {
-		return nil, err
-	}
-
-	return bm, nil
-}
-
-//
-func (bm *ExecutedResult) ToTuple() []interface{} {
-	return []interface{}{ bm.UsedCPUTimeSec, bm.UsedMemoryBytes, bm.Signal, bm.ReturnCode, bm.CommandLine, bm.Status, bm.SystemErrorMessage}
+func (bm *ExecutedResult) IsSucceeded() bool {
+	return bm.SystemErrorStatus == 0 && bm.Exited && bm.ExitStatus == 0
 }

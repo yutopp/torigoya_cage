@@ -75,7 +75,7 @@ const HeaderLength = 5
 type ProtocolDataType map[string]string
 
 //
-func EncodeToTorigoyaProtocol(kind MessageKind, data interface{}) ([]byte, error) {
+func EncodeToTorigoyaProtocol(kind MessageKind, body_buffer []byte) ([]byte, error) {
 	buf := bytes.NewBuffer(nil)
 
 	// write kind(1Bytes)
@@ -84,23 +84,16 @@ func EncodeToTorigoyaProtocol(kind MessageKind, data interface{}) ([]byte, error
 	}
 	if err := binary.Write(buf, binary.LittleEndian, kind); err != nil { return nil, err }
 
-	// (encode data)
-	var msgpack_bytes []byte
-	enc := codec.NewEncoderBytes(&msgpack_bytes, &msgPackHandler)
-	if err := enc.Encode(&data); err != nil {
-		return nil, err
-	}
-
 	// length
-	length := uint32(len(msgpack_bytes))
+	length := uint32(len(body_buffer))
 	err := binary.Write(buf, binary.LittleEndian, length)
 	if err != nil { return nil, err }
 
 	// data
-	{
-		length, err := buf.Write(msgpack_bytes)
-		if err != nil { return nil, err }
-		if length != length { return nil, errors.New("Failed to write data") }
+	n, err := buf.Write(body_buffer)
+	if err != nil { return nil, err }
+	if uint32(n) != length {
+		return nil, errors.New("Failed to write data: length are different")
 	}
 
 	return buf.Bytes(), nil
@@ -114,7 +107,7 @@ type ProtocolHandler struct {
 	buffer			[]byte
 }
 
-func (ph *ProtocolHandler) read(reader io.Reader) (MessageKind, interface{}, error) {
+func (ph *ProtocolHandler) read(reader io.Reader) (MessageKind, []byte, error) {
 	// read protocol
 
 	// read header
@@ -153,18 +146,25 @@ func (ph *ProtocolHandler) read(reader io.Reader) (MessageKind, interface{}, err
 	}
 
 	//
-	log.Printf("read:: kind: %d / length: %d, /value: %v\n", kind, length, ph.buffer[0:length])
-	var data interface{}
-	dec := codec.NewDecoderBytes(ph.buffer[0:length], &msgPackHandler)
-	if err := dec.Decode(&data); err != nil {
-		return MessageKindInvalid, nil, err
-	}
+	log.Printf("read:: kind: %d / length: %d, /value: %v\n", kind, length, ph.buffer[:length])
 
-	return MessageKind(kind), data, nil
+	return MessageKind(kind), ph.buffer[:length], nil
 }
 
-func (ph *ProtocolHandler) write(writer io.Writer, header MessageKind, data interface{}) error {
-	buf, err := EncodeToTorigoyaProtocol(header, data)
+func (ph *ProtocolHandler) write(
+	writer io.Writer,
+	header MessageKind,
+	object interface{},
+) error {
+	// encode
+	var msgpack_bytes []byte
+	enc := codec.NewEncoderBytes(&msgpack_bytes, &msgPackHandler)
+	if err := enc.Encode(&object); err != nil {
+		return err
+	}
+
+	//
+	buf, err := EncodeToTorigoyaProtocol(header, msgpack_bytes)
 	if err != nil {
 		return err
 	}
@@ -194,7 +194,7 @@ func (ph *ProtocolHandler) writeOutputResult(
 	writer io.Writer,
 	r *StreamOutputResult,
 ) error {
-	return ph.write(writer, MessageKindOutputs, r.ToTuple())
+	return ph.write(writer, MessageKindOutputs, r)
 }
 
 //
@@ -202,7 +202,7 @@ func (ph *ProtocolHandler) writeExecutedResult(
 	writer io.Writer,
 	r *StreamExecutedResult,
 ) error {
-	return ph.write(writer, MessageKindResult, r.ToTuple())
+	return ph.write(writer, MessageKindResult, r)
 }
 
 //

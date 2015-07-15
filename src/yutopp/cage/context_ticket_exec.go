@@ -16,17 +16,9 @@ import(
 	"errors"
 	"os"
 	"io/ioutil"
-	_ "path/filepath"
+
+	"github.com/jmcvetta/randutil"
 )
-
-
-// send this message to sandbox process
-type ExecMessage struct {
-	Profile				*ProcProfile
-	StdinFilePath		*string
-	Setting				*ExecutionSetting
-	Mode				int
-}
 
 const (
 	CompileMode = iota
@@ -34,23 +26,41 @@ const (
 	RunMode
 )
 
+const guestHome = "/home/torigoya"
+
 var (
 	compileFailedError	= errors.New("compile failed")
 	linkFailedError		= errors.New("link failed")
 	buildFailedError	= errors.New("build failed")
 )
 
+//
+type invokeResultRecieverCallback		func(interface{})
+
+
+// ========================================
 // ========================================
 func (ctx *Context) ExecTicket(
 	ticket				*Ticket,
 	callback			invokeResultRecieverCallback,
 ) error {
-	log.Printf("-- START ticket => %s\n", ticket.BaseName)
-	defer log.Printf("-- FINISH ticket  => %s\n", ticket.BaseName)
+	base_name, err := func() (string, error) {
+		if ticket.BaseName != "" {
+			return ticket.BaseName, nil
+		} else {
+			return randutil.AlphaString(32)
+		}
+	}()
+	if err != nil {
+		return err
+	}
 
-	log.Printf("mapSources => %s\n", ticket.BaseName)
+	log.Printf("-- START ticket => %s\n", base_name)
+	defer log.Printf("-- FINISH ticket  => %s\n", base_name)
+
+	log.Printf("mapSources => %s\n", base_name)
 	// map files and create user's directory
-	path_used_as_home, err := ctx.mapSources(ticket.BaseName, ticket.Sources)
+	path_used_as_home, err := ctx.mapSources(base_name, ticket.Sources)
 	if err != nil {
 		return err
 	}
@@ -82,7 +92,8 @@ func (ctx *Context) ExecTicket(
 }
 
 
-//
+// ========================================
+// ========================================
 func (ctx *Context) execBuild(
 	path_used_as_home	string,
 	build_inst			*BuildInstruction,
@@ -155,8 +166,6 @@ func (ctx *Context) execManagedRun(
 
 // ========================================
 // ========================================
-
-
 func (ctx *Context) invokeCompileCommand(
 	path_used_as_home	string,
 	exec_inst			*ExecutionSetting,
@@ -164,17 +173,15 @@ func (ctx *Context) invokeCompileCommand(
 ) error {
 	log.Println(">> called invokeCompileCommand")
 
-	const GuestHome = "/home/torigoya"
-
 	opts := &SandboxExecutionOption{
 		Mounts:	[]MountOption{
 			MountOption{
 				HostPath: path_used_as_home,
-				GuestPath: GuestHome,
+				GuestPath: guestHome,
 				IsReadOnly: false,
 			},
 		},
-		GuestHomePath: GuestHome,
+		GuestHomePath: guestHome,
 		Limits: &ResourceLimit{
 			Core: 0,							// Process can NOT create CORE file
 			Nofile: 512,						// Process can open 512 files
@@ -196,7 +203,7 @@ func (ctx *Context) invokeCompileCommand(
 		})
 	}
 	result, err := ctx.sandboxExecutor.Execute(opts, nil, f)
-	log.Println(">> %v", result)
+	log.Printf("Compile Executed >> %v / %err", result, err)
 	if err != nil {
 		return err
 	}
@@ -207,9 +214,12 @@ func (ctx *Context) invokeCompileCommand(
 		Result: result,
 	})
 
-	return err
+	if !result.IsSucceeded() {
+		return compileFailedError
+	} else {
+		return nil
+	}
 }
-
 
 func (ctx *Context) invokeLinkCommand(
 	path_used_as_home	string,
@@ -218,17 +228,15 @@ func (ctx *Context) invokeLinkCommand(
 ) error {
 	log.Println(">> called invokeLinkCommand")
 
-	const GuestHome = "/home/torigoya"
-
 	opts := &SandboxExecutionOption{
 		Mounts:	[]MountOption{
 			MountOption{
 				HostPath: path_used_as_home,
-				GuestPath: GuestHome,
+				GuestPath: guestHome,
 				IsReadOnly: false,
 			},
 		},
-		GuestHomePath: GuestHome,
+		GuestHomePath: guestHome,
 		Limits: &ResourceLimit{
 			Core: 0,							// Process can NOT create CORE file
 			Nofile: 512,						// Process can open 512 files
@@ -250,7 +258,7 @@ func (ctx *Context) invokeLinkCommand(
 		})
 	}
 	result, err := ctx.sandboxExecutor.Execute(opts, nil, f)
-	log.Println(">> %v", result)
+	log.Printf(">> %v", result)
 	if err != nil {
 		return err
 	}
@@ -261,7 +269,11 @@ func (ctx *Context) invokeLinkCommand(
 		Result: result,
 	})
 
-	return err
+	if !result.IsSucceeded() {
+		return linkFailedError
+	} else {
+		return nil
+	}
 }
 
 func (ctx *Context) invokeRunCommand(
@@ -272,25 +284,22 @@ func (ctx *Context) invokeRunCommand(
 ) error {
 	log.Println(">> called invokeRunInputCommand")
 
-	const GuestHome = "/home/torigoya"
-	const GuestInputs = "/home/torigoya/inputs"
-
-	// stdin := input.stdin
-	exec_inst := input.setting
+	stdin := input.Stdin
+	exec_inst := input.RunSetting
 
 	var temp_stdin *os.File = nil
-	if input.stdin != nil {
+	if stdin != nil {
 		log.Println("use stdin")
 
 		f, err := ioutil.TempFile("", "torigoya-inputs-");
 		if err != nil { return err }
 		defer f.Close()
 
-		n, err := f.Write(input.stdin.Data)
+		n, err := f.Write(stdin.Data)
 		if err != nil {
 			return err
 		}
-		if n != len(input.stdin.Data) {
+		if n != len(stdin.Data) {
 			return errors.New("input length is different")
 		}
 
@@ -314,11 +323,11 @@ func (ctx *Context) invokeRunCommand(
 		Mounts:	[]MountOption{
 			MountOption{
 				HostPath: path_used_as_home,
-				GuestPath: GuestHome,
+				GuestPath: guestHome,
 				IsReadOnly: false,
 			},
 		},
-		GuestHomePath: GuestHome,
+		GuestHomePath: guestHome,
 		Limits: &ResourceLimit{
 			Core: 0,							// Process can NOT create CORE file
 			Nofile: 512,						// Process can open 512 files
@@ -340,26 +349,25 @@ func (ctx *Context) invokeRunCommand(
 		})
 	}
 	result, err := ctx.sandboxExecutor.Execute(opts, temp_stdin, f)
-	log.Println(">> %v", result)
+	log.Println("sandboxExecutor.Execute >> %v", result)
 	if err != nil {
 		return err
 	}
 
+	log.Printf(">> %v", result)
 	callback(&StreamExecutedResult{
 		Mode: RunMode,
 		Index: index,
 		Result: result,
 	})
+	log.Println("sandboxExecutor.Exit >> %v", result)
 
-	return err
+	return nil
 }
 
 
-
 // ========================================
 // ========================================
-
-
 func (ctx *Context) mapSources(
 	base_name			string,
 	sources				[]*SourceData,
@@ -381,34 +389,3 @@ func (ctx *Context) mapSources(
 
 	return user_home_dir_path, nil
 }
-
-
-// ========================================
-// ========================================
-
-
-//
-type StreamOutputResult struct {
-	Mode		int
-	Index		int
-	Output		*StreamOutput
-}
-
-func (r *StreamOutputResult) ToTuple() []interface{} {
-	return []interface{}{ r.Mode, r.Index, r.Output.ToTuple() }
-}
-
-
-//
-type StreamExecutedResult struct {
-	Mode		int
-	Index		int
-	Result		*ExecutedResult
-}
-func (r *StreamExecutedResult) ToTuple() []interface{} {
-	return []interface{}{ r.Mode, r.Index, r.Result.ToTuple() }
-}
-
-
-//
-type invokeResultRecieverCallback		func(interface{})

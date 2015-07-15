@@ -10,11 +10,13 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+
+	"github.com/ugorji/go/codec"
 )
 
 
 //
-const ServerVersion = "v2014/7/5"
+const ServerVersion = "20150715"
 
 //
 func RunServer(
@@ -24,6 +26,10 @@ func RunServer(
 	notifier chan<-error,
 	notify_pid int,
 ) error {
+	if notifier == nil {
+		return errors.New("notifier must be specified")
+	}
+
 	laddr := makeAddress(host, port)
 	listener, err := net.Listen("tcp", laddr)
 	if err != nil {
@@ -42,8 +48,8 @@ func RunServer(
 		}
 	}()
 
-	// there are no error
-	if notifier != nil { notifier <- nil }
+	// there is no error
+	notifier <- nil
 
 	//
 	if notify_pid != -1 {
@@ -60,23 +66,36 @@ func RunServer(
 		// Wait for a connection.
 		conn, err := listener.Accept()
 		if err != nil {
-			log.Printf("Server / Error: %v\n", err)
+			log.Printf("Server Error[Accept]: %v\n", err)
 			continue
 		}
 
-		log.Printf("Server / Accepted: %v\n", conn)
+		log.Printf("Server Accepted: %v\n", conn)
 		go handleConnection(conn, context)
 	}
 
 	return nil
 }
 
+func retryIfFailed(f func() error) (err error) {
+	// retry 5times if failed...
+	for i:=0; i<5; i++ {
+		if err = f(); err == nil {
+			// if there is no error
+			return nil
+		}
+	}
+
+	return
+}
+
+type session struct {
+}
 
 func handleConnection(c net.Conn, context *Context) {
 	var handler ProtocolHandler
 	log.Printf("Server connection %v\n", c)
 
-	//
 	defer func() {
 		if i := recover(); i != nil {
 			if err, ok := i.(error); ok {
@@ -85,44 +104,24 @@ func handleConnection(c net.Conn, context *Context) {
 			}
         }
 
-		// retry 5times if failed...
-		for i:=0; i<5; i++ {
-			if err := handler.writeExit(c); err == nil {
-				// if error NOT returnd, ok
-				break
-			}
-		}
+		_ = retryIfFailed(func() error {
+			return handler.writeExit(c)
+		})
 
-		//
 		c.Close()
-
-		//
 		log.Printf("Server connection CLOSED %v\n", c)
 	}()
 
 	//
-	error_event := make(chan error)
-
-	//
-	go func() {
-		defer close(error_event)
-
-		if err := acceptGreeting(c, context, &handler, error_event); err != nil {
-			return
-		}
-
-		acceptRequestMessage(c, context, &handler, error_event)
-
-		log.Printf("Resuest passed\n")
-		error_event <- nil
-	}()
-
-	// wait
-	for err := range error_event {
-		if err != nil {
-			panic(err)
-		}
+	if err := acceptGreeting(c, context, &handler); err != nil {
+		panic(err)
 	}
+
+	if err := acceptRequestMessage(c, context, &handler); err != nil {
+		panic(err)
+	}
+
+	log.Printf("Resuest passed %v\n", c)
 }
 
 
@@ -130,37 +129,34 @@ func acceptGreeting(
 	c net.Conn,
 	context *Context,
 	handler *ProtocolHandler,
-	error_event chan<-error,
 ) error {
 	// set timeout at the first time
 	c.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	//
 	log.Printf("acceptGreeting\n")
-	kind, data, err := handler.read(c)
+	kind, buffer, err := handler.read(c)
 	if err != nil {
 		e := errors.New(fmt.Sprintf("Reciever error at Greeting(%V)", err))
-		error_event <- e
 		return e
 	}
-	log.Printf("Server::Recieved: %s / %V\n", kind.String(), data)
+	log.Printf("Server::Recieved: %s / %V\n", kind.String(), buffer)
 
 	// switch process by kind
 	switch kind {
 	case MessageKindAcceptRequest:
-		version_bytes, ok := data.([]uint8)
-		if !ok {
-			e := errors.New("Given version data is not string")
-			error_event <- e
-			return e
+		// decode
+		var version string
+		dec := codec.NewDecoderBytes(buffer, &msgPackHandler)
+		if err := dec.Decode(&version); err != nil {
+			return err
 		}
-		version := string(version_bytes)
+
 		log.Printf("Client Version : %s\n", version)
 
 		// version matching
 		if version != ServerVersion {
 			e := errors.New(fmt.Sprintf("Client version is different from server (Server: %s / Client: %s)", ServerVersion, version))
-			error_event <- e
 			return e
 		}
 
@@ -172,12 +168,10 @@ func acceptGreeting(
 			}
 		}
 		e := errors.New("Failed to send output result : " + err.Error())
-		error_event <- e
 		return e
 
 	default:
 		e := errors.New("Server can accept only 'AcceptRequest' messages")
-		error_event <- e
 		return e
 	}
 }
@@ -186,106 +180,138 @@ func acceptRequestMessage(
 	c net.Conn,
 	context *Context,
 	handler *ProtocolHandler,
-	error_event chan<-error,
-) {
+) error {
 	// set timeout at the first time
 	c.SetReadDeadline(time.Now().Add(10 * time.Second))
 
 	//
-	kind, data, err := handler.read(c)
+	kind, buffer, err := handler.read(c)
 	if err != nil {
-		error_event <- errors.New(fmt.Sprintf("Reciever error at acceptRequestMessage(%V)", err))
-		return
+		return errors.New(fmt.Sprintf("Reciever error at acceptRequestMessage(%V)", err))
 	}
-	log.Printf("Server::Recieved: %s / %V\n", kind.String(), data)
+	log.Printf("Server::Recieved: %s / %V\n", kind.String(), buffer)
 
 	// switch process by kind
 	switch kind {
 	case MessageKindTicketRequest:
 		// accept ticket execution request
-		acceptTicketRequestMessage(data, c, context, handler, error_event)
+		return acceptTicketRequestMessage(buffer, c, context, handler)
 
 	case MessageKindUpdateRepositoryRequest:
 		// install/upgrade APT repository
-		acceptUpdateRepositoryRequest(c, context, handler, error_event)
+		return acceptUpdateRepositoryRequest(c, context, handler)
 
 	case MessageKindReloadProcTableRequest:
 		// reload ProcProfiles
-		acceptReloadProcTableRequest(c, context, handler, error_event)
+		return acceptReloadProcTableRequest(c, context, handler)
 
 	case MessageKindUpdateProcTableRequest:
 		// update ProcProfiles
-		acceptUpdateProcTableRequest(c, context, handler, error_event)
+		return acceptUpdateProcTableRequest(c, context, handler)
 
 	case MessageKindGetProcTableRequest:
 		// send ProcProfiles to the client
-		acceptGetProcTableMessage(c, context, handler, error_event)
+		return acceptGetProcTableMessage(c, context, handler)
 
 	default:
-		error_event <- errors.New(fmt.Sprintf("Server can not accept message (%d)", kind))
-		return
+		return errors.New(fmt.Sprintf("Server can not accept message (%d)", kind))
 	}
 }
 
+type hoge struct {}
+
 //
 func acceptTicketRequestMessage(
-	data interface{},
+	buffer []byte,
 	c net.Conn,
 	context *Context,
 	handler *ProtocolHandler,
-	error_event chan<-error,
-) {
-	// execute ticket
-	fmt.Printf("ticket request %V\n", data)
-	ticket, err := MakeTicketFromTuple(data)
-	if err != nil {
-		fmt.Printf("Server::Invalid request (%s)\n", err.Error())
-		error_event <- errors.New(fmt.Sprintf("Invalid request (%s)", err.Error()))
-		return
+) error {
+	log.Printf(">> begin acceptTicketRequestMessage")
+	defer log.Printf("<< exit acceptTicketRequestMessage")
+
+	var ticket Ticket
+	dec := codec.NewDecoderBytes(buffer, &msgPackHandler)
+	if err := dec.Decode(&ticket); err != nil {
+		return err
 	}
-	fmt.Printf("ticket %V\n", ticket)
+
+	// execute ticket
+	log.Printf("ticket %V\n", ticket)
 
 	// callback function
 	error_happend := false
+	var comm_err error = nil
+	results_ch := make(chan interface{}, 100)
 	f := func(v interface{}) {
+		log.Printf("CALLBACK: %v", v)
 		if error_happend { return }
-
-		switch v.(type) {
-		case *StreamOutputResult:
-			var err error = nil
-			for i:=0; i<5; i++ {		// retry 5times if failed...
-				if err = handler.writeOutputResult(c, v.(*StreamOutputResult)); err == nil {
-					return
-				}
-			}
-			error_event <- errors.New("Failed to send output result : " + err.Error())
-			error_happend = true
-			return
-
-		case *StreamExecutedResult:
-			var err error = nil
-			for i:=0; i<5; i++ {		// retry 5times if failed...
-				if err = handler.writeExecutedResult(c, v.(*StreamExecutedResult)); err == nil {
-					return
-				}
-			}
-			error_event <- errors.New("Failed to send executed result : " + err.Error())
-			error_happend = true
-			return
-
-		default:
-			error_event <- errors.New("Unsupported type object was given to callback")
-			error_happend = true
-			return
-		}
+		results_ch <- v
 	}
+
+	reading_ch := make(chan error)
+	go func() {
+		defer func() {
+			err := recover()
+			if err != nil {
+				reading_ch <- err.(error)
+			}
+        }()
+
+		for v := range results_ch {
+			switch v.(type) {
+			case *StreamOutputResult:
+				log.Printf("StreamOutputResult >> %v", v.(*StreamOutputResult))
+
+				if err := retryIfFailed(func() error {
+					return handler.writeOutputResult(c, v.(*StreamOutputResult))
+				}); err != nil {
+					log.Printf("StreamOutputResult / Error >> %v", err)
+					reading_ch <- err
+					error_happend = true
+					return
+				}
+				break
+
+			case *StreamExecutedResult:
+				log.Printf("StreamExecutedResult >> %v", v.(*StreamExecutedResult))
+
+				if err := retryIfFailed(func() error {
+					return handler.writeExecutedResult(c, v.(*StreamExecutedResult))
+				}); err != nil {
+					log.Printf("StreamExecutedResult / Error >> %v", err)
+					reading_ch <- err
+					error_happend = true
+					return
+				}
+				break
+
+			case *hoge:
+				reading_ch <- nil
+				return
+
+			default:
+				err := errors.New("Unsupported type object was given to callback")
+				reading_ch <- err
+				error_happend = true
+				return
+			}
+		}
+
+		// TODO: make it error
+		reading_ch <- nil
+	}()
 
 	// execute ticket data
-	if err := context.ExecTicket(ticket, f); err != nil {
+	if err := context.ExecTicket(&ticket, f); err != nil {
 		fmt.Printf("Server::Failed to exec ticket (%s)\n", err.Error())
-		error_event <- errors.New(fmt.Sprintf("Failed to exec ticket (%s)", err.Error()))
-		return
+		return errors.New(fmt.Sprintf("Failed to exec ticket (%s)", err.Error()))
 	}
+	results_ch <- &hoge{}
+
+	<-reading_ch
+
+	return comm_err
 }
 
 //
@@ -293,21 +319,18 @@ func acceptUpdateRepositoryRequest(
 	c net.Conn,
 	context *Context,
 	handler *ProtocolHandler,
-	error_event chan<-error,
-) {
+) error {
 	if err := context.UpdatePackages(); err != nil {
-		error_event <- err
-		return
+		return err
 	}
 
-	var err error = nil
-	for i:=0; i<5; i++ {		// retry 5times if failed...
-		if err = handler.writeSystemResult(c, 0); err == nil {
-			return
-		}
+	if err := retryIfFailed(func() error {
+		return handler.writeSystemResult(c, 0)
+	}); err != nil {
+		return errors.New("Failed to send system request: " + err.Error())
 	}
 
-	error_event <- errors.New("Failed to send system request: " + err.Error())
+	return nil
 }
 
 //
@@ -315,21 +338,18 @@ func acceptReloadProcTableRequest(
 	c net.Conn,
 	context *Context,
 	handler *ProtocolHandler,
-	error_event chan<-error,
-) {
+) error {
 	if err := context.ReloadProcTable(); err != nil {
-		error_event <- err
-		return
+		return err
 	}
 
-	var err error = nil
-	for i:=0; i<5; i++ {		// retry 5times if failed...
-		if err = handler.writeSystemResult(c, 0); err == nil {
-			return
-		}
+	if err := retryIfFailed(func() error {
+		return handler.writeSystemResult(c, 0)
+	}); err != nil {
+		return errors.New("Failed to send system request: " + err.Error())
 	}
 
-	error_event <- errors.New("Failed to send system request: " + err.Error())
+	return nil
 }
 
 //
@@ -337,21 +357,18 @@ func acceptUpdateProcTableRequest(
 	c net.Conn,
 	context *Context,
 	handler *ProtocolHandler,
-	error_event chan<-error,
-) {
+) error {
 	if err := context.UpdateProcTable(); err != nil {
-		error_event <- err
-		return
+		return err
 	}
 
-	var err error = nil
-	for i:=0; i<5; i++ {		// retry 5times if failed...
-		if err = handler.writeSystemResult(c, 0); err == nil {
-			return
-		}
+	if err := retryIfFailed(func() error {
+		return handler.writeSystemResult(c, 0)
+	}); err != nil {
+		return errors.New("Failed to send system request: " + err.Error())
 	}
 
-	error_event <- errors.New("Failed to send system request: " + err.Error())
+	return nil
 }
 
 //
@@ -359,16 +376,14 @@ func acceptGetProcTableMessage(
 	c net.Conn,
 	context *Context,
 	handler *ProtocolHandler,
-	error_event chan<-error,
-) {
-	var err error = nil
-	for i:=0; i<5; i++ {		// retry 5times if failed...
-		if err = handler.writeProcTable(c, &context.procConfTable); err == nil {
-			return
-		}
+) error {
+	if err := retryIfFailed(func() error {
+		return handler.writeProcTable(c, &context.procConfTable)
+	}); err != nil {
+		return errors.New("Failed to send proc table: " + err.Error())
 	}
 
-	error_event <- errors.New("Failed to send proc table: " + err.Error())
+	return nil
 }
 
 

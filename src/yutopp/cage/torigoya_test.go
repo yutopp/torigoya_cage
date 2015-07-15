@@ -13,12 +13,10 @@ import (
 	"os"
 	"fmt"
 	"path/filepath"
-	"time"
-	"strconv"
 	"bytes"
-
-	//"sync"
 )
+
+
 
 /*
 func TestCreateTarget(t *testing.T) {
@@ -334,9 +332,6 @@ func TestTicketBasicUnit(t *testing.T) {
 	}
 
 	//
-	base_name := "aaa6" + strconv.FormatInt(time.Now().Unix(), 10)
-
-	//
 	sources := []*SourceData{
 		&SourceData{
 			"prog.cpp",
@@ -376,8 +371,8 @@ int main() {
 	run_inst := &RunInstruction{
 		Inputs: []Input{
 			Input{
-				stdin: nil,
-				setting: &ExecutionSetting{
+				Stdin: nil,
+				RunSetting: &ExecutionSetting{
 					Args: []string{"./prog.out"},
 					Envs: []string{},
 					CpuTimeLimit: 10,
@@ -386,12 +381,12 @@ int main() {
 			},
 
 			Input{
-				stdin: &SourceData{
+				Stdin: &SourceData{
 					"hoge.in",
 					[]byte("100"),
 					false,
 				},
-				setting: &ExecutionSetting{
+				RunSetting: &ExecutionSetting{
 					Args: []string{"./prog.out"},
 					Envs: []string{},
 					CpuTimeLimit: 10,
@@ -403,7 +398,7 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: base_name,
+		BaseName: "",
 		Sources: sources,
 		BuildInst: build_inst,
 		RunInst: run_inst,
@@ -421,23 +416,33 @@ int main() {
 	t.Logf("%V", result)
 
 	//
-	expect_result := test_result{
-		compile: test_result_unit{
-			result: &ExecutedResult{
-				Status: Passed,
+	expect_result := testExpectResult{
+		compile: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
 			},
 		},
-		link: test_result_unit{
-			result: &ExecutedResult{
-				Status: Passed,
+		link: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
 			},
 		},
-		run: map[int]*test_result_unit{
-			0: &test_result_unit{
+		run: map[int]*testExpectResultUnit{
+			0: &testExpectResultUnit{
 				out: []byte("hello!\ninput is 0\n"),
+				status: &testExpectStatus{
+					exited: BoolOpt(true),
+					exitStatus: IntOpt(0),
+				},
 			},
-			1: &test_result_unit{
+			1: &testExpectResultUnit{
 				out: []byte("hello!\ninput is 100\n"),
+				status: &testExpectStatus{
+					exited: BoolOpt(true),
+					exitStatus: IntOpt(0),
+				},
 			},
 		},
 	}
@@ -1178,17 +1183,57 @@ int main() {
 // ==================================================
 // ==================================================
 //
-func assertTestResult(t *testing.T, result, expect *test_result) {
-	assertUnit := func (tag string, result, expect *test_result_unit) {
-		if expect.result != nil {
+func assertTestResult(t *testing.T, result *test_result, expect *testExpectResult) {
+	assertUnit := func (tag string, result *test_result_unit, expect *testExpectResultUnit) {
+		// check status(a.k.a result)
+		if expect.status != nil {
+			// expected is specified
 			if result.result == nil {
 				t.Fatalf("[ERROR  : %s / result] result is nil", tag)
 			}
-			if expect.result.Status != result.result.Status {
-				t.Fatalf("ERROR  : [%s / result.Status] Expect(%s) but returned(%s)", tag,
-					expect.result.Status,
-					result.result.Status,
-				)
+
+			if expect.status.exited.Exists {
+				if expect.status.exited.Value != result.result.Exited {
+					t.Fatalf("ERROR  : [%s / result.Exited] Expect(%s) but returned(%s)", tag,
+						expect.status.exited.Value,
+						result.result.Exited,
+					)
+				}
+			} else {
+				t.Logf("[SKIPPED: %s / result.Exited]", tag)
+			}
+
+			if expect.status.exitStatus.Exists {
+				if expect.status.exitStatus.Value != result.result.ExitStatus {
+					t.Fatalf("ERROR  : [%s / result.ExitStatus] Expect(%s) but returned(%s)", tag,
+						expect.status.exitStatus.Value,
+						result.result.ExitStatus,
+					)
+				}
+			} else {
+				t.Logf("[SKIPPED: %s / result.ExitStatus]", tag)
+			}
+
+			if expect.status.signaled.Exists {
+				if expect.status.signaled.Value != result.result.Signaled {
+					t.Fatalf("ERROR  : [%s / result.Exited] Expect(%s) but returned(%s)", tag,
+						expect.status.signaled.Value,
+						result.result.Signaled,
+					)
+				}
+			} else {
+				t.Logf("[SKIPPED: %s / result.Signaled]", tag)
+			}
+
+			if expect.status.signal.Exists {
+				if expect.status.signal.Value != result.result.Signal {
+					t.Fatalf("ERROR  : [%s / result.Exited] Expect(%s) but returned(%s)", tag,
+						expect.status.signal.Value,
+						result.result.Signal,
+					)
+				}
+			} else {
+				t.Logf("[SKIPPED: %s / result.Signal]", tag)
 			}
 
 		} else {
@@ -1223,6 +1268,7 @@ func assertTestResult(t *testing.T, result, expect *test_result) {
 	assertUnit("compile", &result.compile, &expect.compile)
 	assertUnit("link   ", &result.link, &expect.link)
 
+	// run
 	checked := make(map[int]bool)
 	for key, result_unit := range result.run {
 		expect_unit, ok := expect.run[key]
@@ -1239,6 +1285,24 @@ func assertTestResult(t *testing.T, result, expect *test_result) {
 		}
 	}
 }
+
+
+type testExpectResult struct {
+	compile, link	testExpectResultUnit
+	run				map[int]*testExpectResultUnit
+}
+type testExpectResultUnit struct {
+	out, err	[]byte
+	status		*testExpectStatus
+}
+type testExpectStatus struct {
+	exited				BoolOptionalType
+	exitStatus			IntOptionalType
+	signaled			BoolOptionalType
+	signal				IntOptionalType
+}
+
+
 
 type test_result_unit struct {
 	out, err	[]byte
@@ -1307,5 +1371,34 @@ func makeHelperCallback(result *test_result) func(v interface{}) {
 		default:
 			panic("unsupported type.")
 		}
+	}
+}
+
+
+type OptionalBase struct {
+	Exists	bool
+}
+
+type IntOptionalType struct {
+	OptionalBase
+	Value	int
+}
+
+func IntOpt(v int) IntOptionalType {
+	return IntOptionalType{
+		OptionalBase: OptionalBase{true},
+		Value: v,
+	}
+}
+
+type BoolOptionalType struct {
+	OptionalBase
+	Value	bool
+}
+
+func BoolOpt(v bool) BoolOptionalType {
+	return BoolOptionalType{
+		OptionalBase: OptionalBase{true},
+		Value: v,
 	}
 }
