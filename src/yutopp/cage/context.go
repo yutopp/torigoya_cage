@@ -6,23 +6,13 @@
 // http://www.boost.org/LICENSE_1_0.txt)
 //
 
-// +build linux
-
 package torigoya
 
 import(
 	"fmt"
 	"errors"
-	_ "strconv"
 	"os"
-	_ "os/user"
-	_ "path/filepath"
-    "os/exec"
 )
-
-type PackageUpdater interface {
-	Update() error
-}
 
 type Context struct {
 	basePath			string
@@ -30,10 +20,6 @@ type Context struct {
 
 	sandboxExecutor		SandboxExecutor
 
-	procConfPath		string
-	procConfTable		ProcConfigTable
-
-	procSrcZipAddress	string
 	packageUpdater		PackageUpdater
 }
 
@@ -43,8 +29,6 @@ type ContextOptions struct {
 
 	SandboxExec				SandboxExecutor
 
-	ProcConfigPath			string
-	ProcSrcZipAddress		string
 	PackageUpdater			PackageUpdater
 }
 
@@ -52,7 +36,7 @@ func InitContext(opts *ContextOptions) (*Context, error) {
 	// TODO: change to checking capability
 	expectRoot()
 
-	// create ~~~ Directory, if not existed
+	// create holder Directory, if not existed
 	if !fileExists(opts.UserFilesBasePath) {
 		err := os.Mkdir(opts.UserFilesBasePath, os.ModeDir | 0700)
 		if err != nil {
@@ -60,73 +44,12 @@ func InitContext(opts *ContextOptions) (*Context, error) {
 		}
 	}
 
-	// LoadProcConfigTable
-	proc_conf_table, err := LoadProcConfigs(opts.ProcConfigPath)
-	if err != nil {
-		// make no error if table coulnd't be loaded
-		proc_conf_table = nil
-	}
-
-	//
 	return &Context{
 		basePath:			opts.BasePath,
 		userFilesBasePath:	opts.UserFilesBasePath,
 
 		sandboxExecutor:	opts.SandboxExec,
 
-		procConfPath:		opts.ProcConfigPath,
-		procConfTable:		proc_conf_table,
-		procSrcZipAddress:	opts.ProcSrcZipAddress,
 		packageUpdater:		opts.PackageUpdater,
 	}, nil
-}
-
-
-func (ctx *Context) HasProcTable() bool {
-	return ctx.procConfTable != nil
-}
-
-
-func (ctx *Context) UpdatePackages() error {
-	if ctx.packageUpdater == nil {
-		return errors.New("Package Updater was not registerd")
-	}
-
-	err := ctx.packageUpdater.Update()
-
-	// TODO: fix it
-    fmt.Printf("= /usr/local/torigoya ============================\n")
-	out, err := exec.Command("/bin/ls", "-la", "/usr/local/torigoya").Output()
-	if err != nil {
-		fmt.Printf("error:: %s\n", err.Error())
-	} else {
-		fmt.Printf("package update passed:: %s\n", out)
-	}
-	fmt.Printf("==================================================\n")
-
-    return err
-}
-
-
-func (ctx *Context) ReloadProcTable() error {
-	// RELOAD LoadProcConfigTable
-	proc_conf_table, err := LoadProcConfigs(ctx.procConfPath)
-	if err != nil {
-		return err
-	}
-
-	// rewrite
-	ctx.procConfTable = proc_conf_table
-
-	return nil
-}
-
-func (ctx *Context) UpdateProcTable() error {
-	if ctx.procSrcZipAddress != "" {
-		if err := ctx.procConfTable.UpdateFromWeb(ctx.procSrcZipAddress, ctx.basePath); err != nil {
-			return err
-		}
-	}
-
-	return ctx.ReloadProcTable()
 }

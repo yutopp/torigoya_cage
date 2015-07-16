@@ -12,7 +12,6 @@ import (
 	"testing"
 	"os"
 	"fmt"
-	"path/filepath"
 	"bytes"
 	"sync"
 	"strconv"
@@ -187,25 +186,9 @@ int main() {
 
 */
 
+
 func TestTicketBasicUnit(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-
-	executor := &AwahoSandboxExecutor{
-		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
-	}
-
-	ctx_opt := &ContextOptions{
-		BasePath: gopath,
-		UserFilesBasePath: "/tmp/hogehoge",
-
-		SandboxExec: executor,
-
-		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
-		ProcSrcZipAddress: "",
-		PackageUpdater: nil,
-	}
-
-	ctx, err := InitContext(ctx_opt)
+	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -332,24 +315,7 @@ int main() {
 }
 
 func TestTicketBasicParallel1(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-
-	executor := &AwahoSandboxExecutor{
-		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
-	}
-
-	ctx_opt := &ContextOptions{
-		BasePath: gopath,
-		UserFilesBasePath: "/tmp/hogehoge",
-
-		SandboxExec: executor,
-
-		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
-		ProcSrcZipAddress: "",
-		PackageUpdater: nil,
-	}
-
-	ctx, err := InitContext(ctx_opt)
+	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -498,24 +464,7 @@ int main() {
 }
 
 func TestTicketBasicParallel2(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-
-	executor := &AwahoSandboxExecutor{
-		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
-	}
-
-	ctx_opt := &ContextOptions{
-		BasePath: gopath,
-		UserFilesBasePath: "/tmp/hogehoge",
-
-		SandboxExec: executor,
-
-		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
-		ProcSrcZipAddress: "",
-		PackageUpdater: nil,
-	}
-
-	ctx, err := InitContext(ctx_opt)
+	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -646,24 +595,7 @@ int main() {
 }
 
 func TestTicketTLE(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-
-	executor := &AwahoSandboxExecutor{
-		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
-	}
-
-	ctx_opt := &ContextOptions{
-		BasePath: gopath,
-		UserFilesBasePath: "/tmp/hogehoge",
-
-		SandboxExec: executor,
-
-		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
-		ProcSrcZipAddress: "",
-		PackageUpdater: nil,
-	}
-
-	ctx, err := InitContext(ctx_opt)
+	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -764,24 +696,7 @@ int main() {
 }
 
 func TestTicketSleepTLE(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-
-	executor := &AwahoSandboxExecutor{
-		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
-	}
-
-	ctx_opt := &ContextOptions{
-		BasePath: gopath,
-		UserFilesBasePath: "/tmp/hogehoge",
-
-		SandboxExec: executor,
-
-		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
-		ProcSrcZipAddress: "",
-		PackageUpdater: nil,
-	}
-
-	ctx, err := InitContext(ctx_opt)
+	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -882,24 +797,7 @@ int main() {
 }
 
 func TestTicketMLE(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-
-	executor := &AwahoSandboxExecutor{
-		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
-	}
-
-	ctx_opt := &ContextOptions{
-		BasePath: gopath,
-		UserFilesBasePath: "/tmp/hogehoge",
-
-		SandboxExec: executor,
-
-		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
-		ProcSrcZipAddress: "",
-		PackageUpdater: nil,
-	}
-
-	ctx, err := InitContext(ctx_opt)
+	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -1007,24 +905,7 @@ int main() {
 }
 
 func TestTicketRepeat(t *testing.T) {
-	gopath := os.Getenv("GOPATH")
-
-	executor := &AwahoSandboxExecutor{
-		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
-	}
-
-	ctx_opt := &ContextOptions{
-		BasePath: gopath,
-		UserFilesBasePath: "/tmp/hogehoge",
-
-		SandboxExec: executor,
-
-		ProcConfigPath: filepath.Join(gopath, "files", "proc_profiles_for_core_test"),
-		ProcSrcZipAddress: "",
-		PackageUpdater: nil,
-	}
-
-	ctx, err := InitContext(ctx_opt)
+	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
 		t.Errorf(err.Error())
 		return
@@ -1129,6 +1010,25 @@ int main() {
 
 	//
 	assertTestResult(t, &result, &expect_result)
+}
+
+
+// ==================================================
+// ==================================================
+//
+func makeDefaultCtxOpt() *ContextOptions {
+	gopath := os.Getenv("GOPATH")
+
+	executor := &AwahoSandboxExecutor{
+		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
+	}
+
+	return &ContextOptions{
+		BasePath: gopath,
+		UserFilesBasePath: "/tmp/hogehoge",
+
+		SandboxExec: executor,
+	}
 }
 
 
