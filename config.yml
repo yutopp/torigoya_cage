@@ -1,20 +1,18 @@
 system_test_mode:
   host: "0.0.0.0"
   port: 49800
-  host_user: "root"
-  lang_proc_config_dir: "${base}/torigoya_proc_profiles"
-  lang_proc_update_zip_address: ""
-  proc_package_type: "deb"
-  proc_package_deb_source_list: "sources.list.d/torigoya-packages.list"
+  updater:
+    type: "deb"
+    source_list: "sources.list.d/torigoya-packages.list"
   is_debug_mode: true
-
 
 release:
   host: "0.0.0.0"
   port: 23432
-  host_user: "root"
-  lang_proc_config_dir: "${base}/files/torigoya_proc_profiles-master"
-  lang_proc_update_zip_address: "http://packages.sc.yutopp.net/torigoya_proc_profiles-master.zip"
-  proc_package_type: "deb"
-  proc_package_deb_source_list: "sources.list.d/torigoya-packages.list"
+  updater:
+    type: "deb"
+    source_list: "sources.list.d/torigoya-packages.list"
+  sandbox:
+    type: "awaho"
+    executable_path: "/home/yutopp/repo/awaho/awaho"
   is_debug_mode: false
