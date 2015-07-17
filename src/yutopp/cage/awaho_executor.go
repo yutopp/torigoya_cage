@@ -73,7 +73,7 @@ func (exec *AwahoSandboxExecutor) Execute(
 
 	//
 	args := []string{
-		exec.ExecutablePath,
+		"d=(^o^)=b",
 		"--start-guest-path", opts.GuestHomePath,
 		"--pipe", "4:1",	// (stdout in sandbox)
 		"--pipe", "5:2",	// (stderr in sandbox)

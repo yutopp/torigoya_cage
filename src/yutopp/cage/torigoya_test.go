@@ -314,6 +314,223 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 
+/*
+func TestTicketPS(t *testing.T) {
+	ctx, err := InitContext(makeDefaultCtxOpt())
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
+#include <cstdlib>
+
+int main() {
+	std::system("ps aux");
+}
+`),
+			false,
+		},
+	}
+
+	//
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs: []string{},
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+	}
+
+	//
+	run_inst := &RunInstruction{
+		Inputs: []Input{
+			Input{
+				Stdin: nil,
+				RunSetting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
+		},
+	}
+
+	//
+	ticket := &Ticket{
+		BaseName: "",
+		Sources: sources,
+		BuildInst: build_inst,
+		RunInst: run_inst,
+	}
+
+	// execute
+	var result test_result
+	result.run = make(map[int]*test_result_unit)
+	f := makeHelperCallback(&result)
+	if err := ctx.ExecTicket(ticket, f); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	expect_result := testExpectResult{
+		compile: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
+		},
+		link: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
+		},
+		run: map[int]*testExpectResultUnit{
+			0: &testExpectResultUnit{
+				out: []byte("hello!\ninput is 0\n"),
+				status: &testExpectStatus{
+					exited: BoolOpt(true),
+					exitStatus: IntOpt(0),
+				},
+			},
+		},
+	}
+
+	//
+	assertTestResult(t, &result, &expect_result)
+}
+*/
+
+func TestTicketSignal(t *testing.T) {
+	ctx, err := InitContext(makeDefaultCtxOpt())
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
+#include <stdio.h>
+#include <signal.h>
+#include <errno.h>
+#include <string.h>
+
+int main() {
+    puts("hello!");
+	fflush(stdout);
+    if ( raise(9) != 0 ) {
+        printf("errno=%d : %s\\n", errno, strerror( errno ));
+    }
+    puts("unreachable!");
+
+    return 0;
+}
+`),
+			false,
+		},
+	}
+
+	//
+	build_inst := &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs: []string{},
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
+			CpuTimeLimit: 10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+	}
+
+	//
+	run_inst := &RunInstruction{
+		Inputs: []Input{
+			Input{
+				Stdin: nil,
+				RunSetting: &ExecutionSetting{
+					Args: []string{"./prog.out"},
+					Envs: []string{},
+					CpuTimeLimit: 10,
+					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+				},
+			},
+		},
+	}
+
+	//
+	ticket := &Ticket{
+		BaseName: "",
+		Sources: sources,
+		BuildInst: build_inst,
+		RunInst: run_inst,
+	}
+
+	// execute
+	var result test_result
+	result.run = make(map[int]*test_result_unit)
+	f := makeHelperCallback(&result)
+	if err := ctx.ExecTicket(ticket, f); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	t.Logf("%V", result)
+
+	//
+	expect_result := testExpectResult{
+		compile: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
+		},
+		link: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(true),
+				exitStatus: IntOpt(0),
+			},
+		},
+		run: map[int]*testExpectResultUnit{
+			0: &testExpectResultUnit{
+				out: []byte("hello!\n"),
+				status: &testExpectStatus{
+					exited: BoolOpt(false),
+					signaled: BoolOpt(true),
+					signal: IntOpt(9),
+				},
+			},
+		},
+	}
+
+	//
+	assertTestResult(t, &result, &expect_result)
+}
+
 func TestTicketBasicParallel1(t *testing.T) {
 	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
