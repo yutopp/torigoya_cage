@@ -1,1 +1,1 @@
-deb [arch=amd64] http://packages.sc.yutopp.net/ trusty main
+deb [arch=amd64] http://packages.sc.yutopp.net/apt/ trusty main
