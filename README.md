@@ -1,18 +1,12 @@
-# Sandbox environment for Torigoya
-**!!under construction!!**
-Currently, this program may harm your computer. **PLEASE EXECUTE THIS PROGRAM IN THE VIRTUAL ENVIRONMENT.** *PLEASE EXECUTE THIS PROGRAM IN THE VIRTUAL ENVIRONMENT.* ***PLEASE EXECUTE THIS PROGRAM IN THE VIRTUAL ENVIRONMENT.***
+# Sandbox server for Torigoya
+Server backend for Torigoya  
+Sandbox environment is developed on [yutopp/awaho](https://github.com/yutopp/awaho)
 
 ## OS Support
-Only `Ubuntu 14.01 64bit`
+Only `Linux`
 
 ## Development
 See [wiki](https://github.com/yutopp/torigoya_cage/wiki)(Japanese)
 
-## Requirement
-[Vagrant](http://www.vagrantup.com/ "Vagrant")
-
-[Docker](http://www.docker.com/ "Docker")(optional)
-
 ## License
-
 Boost License Version 1.0
