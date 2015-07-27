@@ -1,17 +1,6 @@
-bin/
-pkg/
+/bin/
+/pkg/
 
-.vagrant
+/.vagrant
 
-torigoya_factory
-torigoya_proc_profiles
-
-cage.test
-cpu.pprof
-cpu.txt
-mem.pprof
-mem.txt
-
-.bundle
-vendor/
-*.lock
+/recieved_files
