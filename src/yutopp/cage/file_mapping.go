@@ -62,7 +62,7 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 	// ========================================
 	// create the user directory
 	user_home_dir_path := filepath.Join(ctx.userFilesBasePath, base_name)
-	if err := ctx.craeteDir(user_home_dir_path); err != nil {
+	if err := ctx.createDir(user_home_dir_path); err != nil {
 		return "", err
 	}
 
@@ -78,7 +78,7 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 }
 
 
-func (ctx *Context) craeteDir(dir_name string) error {
+func (ctx *Context) createDir(dir_name string) error {
 	if fileExists(dir_name) {
 		return errors.New(
 			fmt.Sprintf(
