@@ -18,7 +18,6 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   # for development
   config.vm.network "private_network", ip: "192.168.33.20", virtualbox__intnet: "torigoya_dev"
 
-
   config.vm.provider :virtualbox do |vb|
     vb.customize ["modifyvm", :id, "--memory", 1024]
     # http://stackoverflow.com/questions/22901859/cannot-make-outbound-http-requests-from-vagrant-vm
@@ -29,13 +28,9 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
 
   #
-  config.vm.provision :shell, :inline => ["cp /vagrant/files/torigoya-packages.list /etc/apt/sources.list.d/.",
+  config.vm.provision :shell, :inline => ["cp /vagrant/files/torigoya-packages.debug.list /etc/apt/sources.list.d/.",
                                           "sudo apt-get -y update",
                                           "sudo apt-get -y upgrade",
                                           "sudo apt-get -y install golang build-essential git unzip",
-                                          "sudo apt-get -y install ruby ruby-dev",
-                                          "gem install bundler --no-rdoc --no-ri",
-                                          "cd /vagrant; bundle install --path vendor/bundler",
-                                          "cd /vagrant; bundle install --path vendor/bundler"
                                          ].join("; ")
 end
