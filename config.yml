@@ -14,5 +14,5 @@ release:
     source_list: "sources.list.d/torigoya-packages.list"
   sandbox:
     type: "awaho"
-    executable_path: "/home/yutopp/repo/awaho/awaho"
+    executable_path: "./_awaho/awaho"
   is_debug_mode: false

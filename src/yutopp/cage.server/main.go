@@ -106,8 +106,11 @@ func main() {
 	var sandbox torigoya.SandboxExecutor = nil
 	switch target_config.SandboxExecutor.Type {
 		case "awaho":
-		sandbox = &torigoya.AwahoSandboxExecutor{
-			ExecutablePath: target_config.SandboxExecutor.AwahoExecutable,
+		sandbox, err = torigoya.MakeAwahoSandboxExecutor(
+			target_config.SandboxExecutor.AwahoExecutable,
+		)
+		if err != nil {
+			log.Panicf(err.Error())
 		}
 
 	default:
@@ -126,7 +129,7 @@ func main() {
 	}
 	log.Printf("Sandbox :  %s", target_config.SandboxExecutor)
 
-	//
+
 	// make context!
 	ctx_opt := &torigoya.ContextOptions{
 		BasePath: cwd,

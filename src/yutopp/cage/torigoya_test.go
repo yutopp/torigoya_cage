@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"sync"
 	"strconv"
+	"path/filepath"
 )
 
 
@@ -1236,8 +1237,8 @@ int main() {
 func makeDefaultCtxOpt() *ContextOptions {
 	gopath := os.Getenv("GOPATH")
 
-	executor := &AwahoSandboxExecutor{
-		ExecutablePath: "/home/yutopp/repo/awaho/awaho",
+	executor := &awahoSandboxExecutor{
+		ExecutablePath: filepath.Join(gopath, "_awaho/awaho"),
 	}
 
 	return &ContextOptions{

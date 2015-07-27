@@ -16,6 +16,7 @@ import(
 	"time"
 	"errors"
 	"os"
+	"path/filepath"
 	"strconv"
 	"encoding/json"
 	"sync"
@@ -45,11 +46,31 @@ type resultPair struct {
 	err		error
 }
 
-type AwahoSandboxExecutor struct {
+
+type awahoSandboxExecutor struct {
 	ExecutablePath		string
 }
 
-func (exec *AwahoSandboxExecutor) Execute(
+func MakeAwahoSandboxExecutor(
+	executablePath		string,
+) (*awahoSandboxExecutor, error) {
+	cwd, err := os.Getwd()
+	if err != nil { return nil, err }
+
+	path := func() string {
+		if filepath.IsAbs(executablePath) {
+			return executablePath
+		} else {
+			return filepath.Join(cwd, executablePath)
+		}
+	}()
+
+	return &awahoSandboxExecutor{
+		ExecutablePath: path,
+	}, nil
+}
+
+func (exec *awahoSandboxExecutor) Execute(
 	opts		*SandboxExecutionOption,
 	stdin_f		*os.File,					// nullable
 	callback	ExecuteCallBackType,
@@ -73,7 +94,7 @@ func (exec *AwahoSandboxExecutor) Execute(
 
 	//
 	args := []string{
-		"d=(^o^)=b",
+		exec.ExecutablePath,
 		"--start-guest-path", opts.GuestHomePath,
 		"--pipe", "4:1",	// (stdout in sandbox)
 		"--pipe", "5:2",	// (stderr in sandbox)
@@ -171,7 +192,7 @@ func (exec *AwahoSandboxExecutor) Execute(
 }
 
 
-func (exec *AwahoSandboxExecutor) makeMountOptions(
+func (exec *awahoSandboxExecutor) makeMountOptions(
 	opts	*SandboxExecutionOption,
 ) []string {
 	if opts.Mounts == nil {
@@ -199,7 +220,7 @@ func (exec *AwahoSandboxExecutor) makeMountOptions(
 	return xs
 }
 
-func (exec *AwahoSandboxExecutor) makeCopyOptions(
+func (exec *awahoSandboxExecutor) makeCopyOptions(
 	opts	*SandboxExecutionOption,
 ) []string {
 	if opts.Copies == nil {
@@ -219,7 +240,7 @@ func (exec *AwahoSandboxExecutor) makeCopyOptions(
 	return xs
 }
 
-func (exec *AwahoSandboxExecutor) makeEnvOptions(
+func (exec *awahoSandboxExecutor) makeEnvOptions(
 	opts	*SandboxExecutionOption,
 ) []string {
 	if opts.Envs == nil {
