@@ -17,6 +17,21 @@ type SourceData struct {
 	IsCompressed	bool	`codec:"is_compressed"`
 }
 
+func (s *SourceData) convertToTextContent() (*TextContent, error) {
+	data, err := func() ([]byte, error) {
+		// TODO: check that data is compressed
+		return s.Data, nil
+	}()
+	if err != nil {
+		return nil, err
+	}
+
+	return &TextContent{
+		Name: s.Name,
+		Data: data,
+	}, nil
+}
+
 func convertSourcesToContents(
 	sources []*SourceData,
 ) (source_contents []*TextContent, err error) {
@@ -25,28 +40,11 @@ func convertSourcesToContents(
 	//
 	for i, s := range sources {
 		// collect file names
-		source_contents[i], err = convertSourceToContent(s)
+		source_contents[i], err = s.convertToTextContent()
 		if err != nil { return nil,err }
 	}
 
 	return source_contents, nil
-}
-
-func convertSourceToContent(
-	source *SourceData,
-) (*TextContent, error) {
-	data, err := func() ([]byte, error) {
-		// TODO: check that data is compressed
-		return source.Data, nil
-	}()
-	if err != nil {
-		return nil, err
-	}
-
-	return &TextContent{
-		Name: source.Name,
-		Data: data,
-	}, nil
 }
 
 

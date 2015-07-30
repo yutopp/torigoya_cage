@@ -1,3 +1,4 @@
+# coding: utf-8
 # -*- mode: ruby -*-
 # vi: set ft=ruby :
 
@@ -28,9 +29,17 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.ssh.shell = "bash -c 'BASH_ENV=/etc/profile exec bash'"
 
   #
-  config.vm.provision :shell, :inline => ["cp /vagrant/files/torigoya-packages.debug.list /etc/apt/sources.list.d/.",
+  config.vm.provision :shell, :inline => ["cp /vagrant/files/torigoya-packages.debug.list /etc/apt/sources.list.d/torigoya-packages.list",
                                           "sudo apt-get -y update",
                                           "sudo apt-get -y upgrade",
                                           "sudo apt-get -y install golang build-essential git unzip",
+                                          "sudo apt-get install g++ libbz2-dev",
+                                          "wget -O boost_1_58_0.tar.gz http://sourceforge.net/projects/boost/files/boost/1.58.0/boost_1_58_0.tar.gz/download",
+                                          "tar xzvf boost_1_58_0.tar.gz",
+                                          "cd boost_1_58_0",
+                                          "./bootstrap.sh",
+                                          "sudo ./b2 --with-system --with-iostreams --with-filesystem --with-program_options -j 4 cxxflags='-std=c++11' install",
+                                          "cd ../"
                                          ].join("; ")
+
 end
