@@ -16,7 +16,6 @@ import (
 	"io/ioutil"
 
 	"yutopp/cage"
-	"path/filepath"
 	"gopkg.in/v1/yaml"
 )
 
@@ -133,7 +132,7 @@ func main() {
 	// make context!
 	ctx_opt := &torigoya.ContextOptions{
 		BasePath: cwd,
-		UserFilesBasePath: filepath.Join(cwd, "recieved_files"),
+		UserFilesBasePath: "/tmp/cage_recieved_files",
 
 		SandboxExec: sandbox,
 		PackageUpdater: updater,
