@@ -10,7 +10,7 @@ fi
 
 echo "Building..."
 cd awaho_src_git
-./build.sh || exit -1
+./build.sh -static -s -DNDEBUG || exit -1
 cd ../
 
 cp awaho_src_git/awaho .
