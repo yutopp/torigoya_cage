@@ -201,18 +201,25 @@ func (exec *awahoSandboxExecutor) makeMountOptions(
 
 	xs := make([]string, len(opts.Mounts) * 2)
 	for _, mount := range opts.Mounts {
-		aux := func() string {
+		auxReadonly := func() string {
 			if mount.IsReadOnly {
 				return "ro"
 			} else {
 				return "rw"
 			}
 		}()
+		auxChown := func() string {
+			if mount.DoChown {
+				return "chown"
+			} else {
+				return ""
+			}
+		}()
 
 		xs = append(
 			xs,
 			[]string{
-				"--mount", mount.HostPath + ":" + mount.GuestPath + ":" + aux,
+				"--mount", mount.HostPath + ":" + mount.GuestPath + ":" + auxReadonly + ":" + auxChown,
 			}...
 		)
 	}

@@ -137,6 +137,7 @@ func main() {
 	ctx_opt := &torigoya.ContextOptions{
 		BasePath: cwd,
 		UserFilesBasePath: "/tmp/cage_recieved_files",
+		PackageInstalledBasePath: target_config.Updater.InstallPrefix,
 
 		SandboxExec: sandbox,
 		PackageUpdater: updater,

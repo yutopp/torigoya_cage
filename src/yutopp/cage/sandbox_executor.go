@@ -16,6 +16,7 @@ type MountOption struct {
 	HostPath	string
 	GuestPath	string
 	IsReadOnly	bool
+	DoChown		bool
 }
 
 type CopyOption struct {

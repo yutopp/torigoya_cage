@@ -15,21 +15,21 @@ import(
 )
 
 type Context struct {
-	basePath			string
-	userFilesBasePath	string
+	basePath					string
+	userFilesBasePath			string
+	packageInstalledBasePath	string
 
-	sandboxExecutor		SandboxExecutor
-
-	packageUpdater		PackageUpdater
+	sandboxExecutor				SandboxExecutor
+	packageUpdater				PackageUpdater
 }
 
 type ContextOptions struct {
-	BasePath				string
-	UserFilesBasePath		string
+	BasePath					string
+	UserFilesBasePath			string
+	PackageInstalledBasePath	string
 
-	SandboxExec				SandboxExecutor
-
-	PackageUpdater			PackageUpdater
+	SandboxExec					SandboxExecutor
+	PackageUpdater				PackageUpdater
 }
 
 func InitContext(opts *ContextOptions) (*Context, error) {
@@ -45,11 +45,11 @@ func InitContext(opts *ContextOptions) (*Context, error) {
 	}
 
 	return &Context{
-		basePath:			opts.BasePath,
-		userFilesBasePath:	opts.UserFilesBasePath,
+		basePath:					opts.BasePath,
+		userFilesBasePath:			opts.UserFilesBasePath,
+		packageInstalledBasePath:	opts.PackageInstalledBasePath,
 
-		sandboxExecutor:	opts.SandboxExec,
-
-		packageUpdater:		opts.PackageUpdater,
+		sandboxExecutor:			opts.SandboxExec,
+		packageUpdater:				opts.PackageUpdater,
 	}, nil
 }

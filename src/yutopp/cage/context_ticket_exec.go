@@ -189,6 +189,13 @@ func (ctx *Context) invokeCompileCommand(
 				HostPath: path_used_as_home,
 				GuestPath: guestHome,
 				IsReadOnly: false,
+				DoChown: true,
+			},
+			MountOption{
+				HostPath: ctx.packageInstalledBasePath,
+				GuestPath: ctx.packageInstalledBasePath,
+				IsReadOnly: true,
+				DoChown: false,
 			},
 		},
 		GuestHomePath: guestHome,
@@ -244,6 +251,13 @@ func (ctx *Context) invokeLinkCommand(
 				HostPath: path_used_as_home,
 				GuestPath: guestHome,
 				IsReadOnly: false,
+				DoChown: true,
+			},
+			MountOption{
+				HostPath: ctx.packageInstalledBasePath,
+				GuestPath: ctx.packageInstalledBasePath,
+				IsReadOnly: true,
+				DoChown: false,
 			},
 		},
 		GuestHomePath: guestHome,
@@ -330,6 +344,14 @@ func (ctx *Context) invokeRunCommand(
 	}
 
 	opts := &SandboxExecutionOption{
+		Mounts: []MountOption{
+			MountOption{
+				HostPath: ctx.packageInstalledBasePath,
+				GuestPath: ctx.packageInstalledBasePath,
+				IsReadOnly: true,
+				DoChown: false,
+			},
+		},
 		Copies:	[]CopyOption{	// NOTE: NOT "Mount", to run async
 			CopyOption{
 				HostPath: path_used_as_home,
