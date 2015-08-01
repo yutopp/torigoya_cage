@@ -213,7 +213,7 @@ func (ctx *Context) invokeCompileCommand(
 		})
 	}
 	result, err := ctx.sandboxExecutor.Execute(opts, nil, f)
-	log.Printf("Compile Executed >> %v / %err", result, err)
+	log.Printf("Compile Executed >> %v / %v", result, err)
 	if err != nil {
 		return err
 	}
@@ -268,7 +268,7 @@ func (ctx *Context) invokeLinkCommand(
 		})
 	}
 	result, err := ctx.sandboxExecutor.Execute(opts, nil, f)
-	log.Printf(">> %v", result)
+	log.Printf("Link Executed >> %v / %v", result, err)
 	if err != nil {
 		return err
 	}
@@ -318,7 +318,7 @@ func (ctx *Context) invokeRunCommand(
 			return err
 		}
 		if noff != 0 {
-			return errors.New("offseet is not 0")
+			return errors.New("offset is not 0")
 		}
 
 		// r--/---/---
@@ -358,7 +358,7 @@ func (ctx *Context) invokeRunCommand(
 		})
 	}
 	result, err := ctx.sandboxExecutor.Execute(opts, temp_stdin, f)
-	log.Println("sandboxExecutor.Execute >> %v", result)
+	log.Printf("Run Executed >> %v / %v", result, err)
 	if err != nil {
 		return err
 	}

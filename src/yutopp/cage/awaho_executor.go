@@ -12,7 +12,7 @@ package torigoya
 
 import(
 	"log"
-
+	"fmt"
 	"time"
 	"errors"
 	"os"
@@ -147,11 +147,11 @@ func (exec *awahoSandboxExecutor) Execute(
 
 	// blocking, wait for finish process
 	ps, _ := process.Wait()
-	log.Printf("=> process finished")
+	log.Printf("=> [awaho executor] process finished")
 
 	if !ps.Success() {
 		// if awaho finished with failed state, it denotes host error
-		return nil, errors.New("Process finished with failed state")
+		return nil, fmt.Errorf("[awaho executor] Process finished with failed state / %s", ps)
 	}
 
 	// TODO: to async
@@ -295,17 +295,17 @@ func readPipeOutputAsync(
 
 		for {
 			pipe.m.Lock()
-			log.Printf("=> READREADREAD")
+			log.Printf("====> PIPE")
 			size, err := pipe.r.Read(buffer)
-			log.Printf("=> READREADREAD => size=%v err=%v", size, err)
+			log.Printf("<==== PIPE : size=%v err=%v", size, err)
 			pipe.m.Unlock()
 			if err != nil {
 				if err == io.EOF {
-					log.Printf("Terminate success fully")
+					log.Printf("Read: Terminate success fully")
 					ch <- nil
 					break
 				} else {
-					log.Printf("Failed to Read: %v", err)
+					log.Printf("Read: Failed / %v", err)
 					ch <- nil	// TODO: change to err
 					break
 				}

@@ -198,15 +198,17 @@ func TestTicketBasicUnit(t *testing.T) {
 	//
 	sources := []*SourceData{
 		&SourceData{
-			"prog.cpp",
+			"prog.c",
 			[]byte(`
-#include <iostream>
+#include <stdio.h>
 
 int main() {
-	std::cout << "hello!" << std::endl;
+	printf("hello!\n");
 	int i;
-	std::cin >> i;
-	std::cout << "input is " << i << std::endl;
+	scanf("%d", &i);
+	printf("input is %d\n", i);
+
+	return 0;
 }
 `),
 			false,
@@ -216,13 +218,15 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
+			Args: []string{"/usr/bin/gcc", "prog.c", "-c", "-o", "prog.o"},
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
 			CpuTimeLimit: 10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
+			Args: []string{"/usr/bin/gcc", "prog.o", "-o", "prog.out"},
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
