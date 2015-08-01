@@ -10,4 +10,5 @@ package torigoya
 
 type PackageUpdater interface {
 	Update() error
+	GetInstallPrefix() string
 }

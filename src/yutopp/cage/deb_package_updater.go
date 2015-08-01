@@ -21,13 +21,25 @@ import(
 )
 
 
-var torigoyaDebPackageMatcher = regexp.MustCompile(`^(torigoya-[^ ]+)( - )(.*)`)
-
 type DebPackageUpdater struct {
 	SourceListPath		string
+	PackagePrefix		string
+	InstallPrefix		string
 }
 
 func (u *DebPackageUpdater) Update() error {
+	//
+	if !fileExists(u.InstallPrefix) {
+		if err := os.MkdirAll(u.InstallPrefix, 0755); err != nil {
+			return err
+		}
+	}
+
+	//
+	regexPattern := fmt.Sprintf(`^(%s[^ ]+)( - )(.*)`, u.PackagePrefix)
+	log.Printf("Regex pattern : %s\n", regexPattern)
+	torigoyaDebPackageMatcher := regexp.MustCompile(regexPattern)
+
 	// update packages for torigoya
 	out, err := exec.Command("sudo", "apt-get", "update", "-o", "Dir::Etc::sourcelist=", u.SourceListPath, "-o", "Dir::Etc::sourceparts=", "-", "-o", "APT::Get::List-Cleanup=", "0").CombinedOutput()
 	log.Printf("DebPackageUpdater apt-get update : %s\n", out)
@@ -36,7 +48,9 @@ func (u *DebPackageUpdater) Update() error {
 	}
 
 	// search packages for torigoya
-	out, err = exec.Command("apt-cache", "search", "torigoya-*").Output()
+	packagePattern := fmt.Sprintf("%s*", u.PackagePrefix)
+	log.Printf("Search packages : %s\n", packagePattern)
+	out, err = exec.Command("apt-cache", "search", packagePattern).Output()
 	if err != nil {
 		return errors.New("DebPackageUpdater error: Couldn't search packages for torigoya")
 	}
@@ -85,4 +99,8 @@ func (u *DebPackageUpdater) Update() error {
 	}
 
 	return nil
+}
+
+func (u *DebPackageUpdater) GetInstallPrefix() string {
+	return u.InstallPrefix
 }

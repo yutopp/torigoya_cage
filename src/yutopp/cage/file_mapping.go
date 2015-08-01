@@ -20,8 +20,8 @@ import(
 
 
 func fileExists(filename string) bool {
-    _, err := os.Stat(filename)
-    return err == nil
+	_, err := os.Stat(filename)
+    return !os.IsNotExist(err)
 }
 
 const implicitDefaultName = "*default*"

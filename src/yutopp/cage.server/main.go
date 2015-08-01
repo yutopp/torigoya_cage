@@ -22,6 +22,8 @@ import (
 type updaterConfig struct {
 	Type			string	`yaml:"type"`
 	DebSourceList	string	`yaml:"source_list"`
+	PackagePrefix	string	`yaml:"package_prefix"`
+	InstallPrefix	string	`yaml:"install_prefix"`
 }
 
 func (c *updaterConfig) String() string {
@@ -89,6 +91,8 @@ func main() {
 		case "deb":
 			updater = &torigoya.DebPackageUpdater{
 				SourceListPath: target_config.Updater.DebSourceList,
+				PackagePrefix: target_config.Updater.PackagePrefix,
+				InstallPrefix: target_config.Updater.InstallPrefix,
 			}
 
 		default:

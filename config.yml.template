@@ -4,6 +4,8 @@ release:
   updater:
     type: "deb"
     source_list: "sources.list.d/torigoya-packages.list"
+    package_prefix: "procgarden-"
+    install_prefix: "/usr/local/procgarden"
   sandbox:
     type: "awaho"
     executable_path: "./_awaho/awaho"

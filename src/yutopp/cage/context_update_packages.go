@@ -22,10 +22,13 @@ func (ctx *Context) UpdatePackages() error {
 	}
 
 	err := ctx.packageUpdater.Update()
+	if err != nil {
+		return err
+	}
 
 	// TODO: fix it
-    log.Printf("= /usr/local/torigoya ============================")
-	out, err := exec.Command("/bin/ls", "-la", "/usr/local/torigoya").Output()
+    log.Printf("= %s ============================", ctx.packageUpdater.GetInstallPrefix())
+	out, err := exec.Command("/bin/ls", "-la", ctx.packageUpdater.GetInstallPrefix()).Output()
 	if err != nil {
 		log.Printf("error:: %s", err.Error())
 	} else {
