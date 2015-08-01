@@ -1364,7 +1364,8 @@ func makeDefaultCtxOpt() *ContextOptions {
 
 	return &ContextOptions{
 		BasePath: gopath,
-		UserFilesBasePath: "/tmp/hogehoge",
+		UserFilesBasePath: "/tmp/cage_test",
+		PackageInstalledBasePath: "/usr/local/procgarden",
 
 		SandboxExec: executor,
 	}
