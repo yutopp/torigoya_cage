@@ -14,7 +14,7 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
   config.vm.box = "ubuntu/trusty64"
 
   # port 12321 is used by torigoya cage server
-  config.vm.network "forwarded_port", guest: 23432, host: 23432, auto_correct: true
+  config.vm.network "forwarded_port", guest: 23456, host: 23456, auto_correct: true
 
   # for development
   config.vm.network "private_network", ip: "192.168.33.20", virtualbox__intnet: "torigoya_dev"

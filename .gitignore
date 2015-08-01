@@ -3,5 +3,6 @@
 /config.yml
 
 /.vagrant
+Vagrantfile
 
 /recieved_files
