@@ -10,8 +10,9 @@ package torigoya
 
 type OutFd		int
 const (
-	StdoutFd = OutFd(0)
-	StderrFd = OutFd(1)
+	// StdinFd = OutFd(0)
+	StdoutFd = OutFd(1)
+	StderrFd = OutFd(2)
 )
 type StreamOutput struct {
 	Fd			OutFd		`codec:"fd"`
