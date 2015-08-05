@@ -17,7 +17,7 @@ import (
 
 //
 const ServerVersion = uint32(20150715)
-const channelBuffer = 1000
+const channelBuffer = 2048
 
 //
 func RunServer(
