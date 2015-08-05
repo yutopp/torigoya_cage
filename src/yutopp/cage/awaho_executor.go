@@ -327,7 +327,7 @@ func readPipeOutputAsync(
 				})
 			}
 
-			log.Printf("=> %V", string(buffer[:size]))
+			//log.Printf("=> %V", string(buffer[:size]))
 		}
 	}()
 

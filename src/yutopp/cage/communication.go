@@ -17,6 +17,7 @@ import (
 
 //
 const ServerVersion = uint32(20150715)
+const channelBuffer = 1000
 
 //
 func RunServer(
@@ -167,14 +168,17 @@ func acceptTicketRequestMessage(
 	// callback function
 	error_happend := false
 	var comm_err error = nil
-	results_ch := make(chan interface{}, 100)
+	results_ch := make(chan interface{}, channelBuffer)
 	f := func(v interface{}) {
 		log.Printf("CALLBACK: %v", v)
-		if error_happend { return }
+		if error_happend {
+			log.Printf("ERROR CALLBACK: %v", v)
+			return
+		}
 		results_ch <- v
 	}
 
-	reading_ch := make(chan error)
+	reading_ch := make(chan error, 10)
 	go func() {
 		defer func() {
 			err := recover()
@@ -186,7 +190,7 @@ func acceptTicketRequestMessage(
 		for v := range results_ch {
 			switch v.(type) {
 			case *StreamOutputResult:
-				log.Printf("StreamOutputResult >> %v", v.(*StreamOutputResult))
+				log.Printf("in:  StreamOutputResult / %v", v.(*StreamOutputResult))
 
 				if err := retryIfFailed(func() error {
 					return handler.writeOutputResult(v.(*StreamOutputResult))
@@ -196,10 +200,12 @@ func acceptTicketRequestMessage(
 					error_happend = true
 					return
 				}
+				log.Printf("out: StreamOutputResult / %v", v.(*StreamOutputResult))
+
 				break
 
 			case *StreamExecutedResult:
-				log.Printf("StreamExecutedResult >> %v", v.(*StreamExecutedResult))
+				log.Printf("in:  StreamExecutedResult / %v", v.(*StreamExecutedResult))
 
 				if err := retryIfFailed(func() error {
 					return handler.writeExecutedResult(v.(*StreamExecutedResult))
@@ -209,22 +215,28 @@ func acceptTicketRequestMessage(
 					error_happend = true
 					return
 				}
+				log.Printf("out: StreamExecutedResult / %v", v.(*StreamExecutedResult))
+
 				break
 
 			case *term:
+				log.Println("in:  terminates")
 				reading_ch <- nil
+				log.Println("out: terminates")
 				return
 
 			default:
+				log.Println("in:  error")
 				err := errors.New("Unsupported type object was given to callback")
 				reading_ch <- err
 				error_happend = true
+				log.Println("out: error")
 				return
 			}
 		}
 
 		// TODO: make it error
-		reading_ch <- nil
+		//reading_ch <- nil
 	}()
 
 	// execute ticket data
