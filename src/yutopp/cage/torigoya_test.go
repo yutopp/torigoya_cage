@@ -15,6 +15,7 @@ import (
 	"bytes"
 	"sync"
 	"strconv"
+	"errors"
 	"path/filepath"
 )
 
@@ -1505,8 +1506,8 @@ type test_result struct {
 	run				map[int]*test_result_unit
 }
 
-func makeHelperCallback(result *test_result) func(v interface{}) {
-	return func(v interface{}) {
+func makeHelperCallback(result *test_result) func(v interface{}) error {
+	return func(v interface{}) error {
 		switch v.(type) {
 		case *StreamExecutedResult:
 			r := v.(*StreamExecutedResult)
@@ -1519,7 +1520,7 @@ func makeHelperCallback(result *test_result) func(v interface{}) {
 				if result.run[r.Index] == nil { result.run[r.Index] = &test_result_unit{} }
 				result.run[r.Index].result = r.Result
 			default:
-				panic("unsupported mode.")
+				return errors.New("unsupported mode.")
 			}
 
 		case *StreamOutputResult:
@@ -1532,7 +1533,7 @@ func makeHelperCallback(result *test_result) func(v interface{}) {
 				case StderrFd:
 					result.compile.err = append(result.compile.err, r.Output.Buffer...)
 				default:
-					panic("unsupported fd.")
+					return errors.New("unsupported fd.")
 				}
 
 			case LinkMode:
@@ -1542,7 +1543,7 @@ func makeHelperCallback(result *test_result) func(v interface{}) {
 				case StderrFd:
 					result.link.err = append(result.link.err, r.Output.Buffer...)
 				default:
-					panic("unsupported fd.")
+					return errors.New("unsupported fd.")
 				}
 
 			case RunMode:
@@ -1553,16 +1554,18 @@ func makeHelperCallback(result *test_result) func(v interface{}) {
 				case StderrFd:
 					result.run[r.Index].err = append(result.run[r.Index].err, r.Output.Buffer...)
 				default:
-					panic("unsupported fd.")
+					return errors.New("unsupported fd.")
 				}
 
 			default:
-				panic("unsupported mode.")
+				return errors.New("unsupported mode.")
 			}
 
 		default:
-			panic("unsupported type.")
+			return errors.New("unsupported type.")
 		}
+
+		return nil
 	}
 }
 

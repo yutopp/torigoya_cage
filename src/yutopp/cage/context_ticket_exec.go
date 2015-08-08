@@ -36,7 +36,7 @@ var (
 )
 
 //
-type invokeResultRecieverCallback		func(interface{})
+type invokeResultRecieverCallback		func(interface{}) error
 
 
 // ========================================
@@ -212,8 +212,8 @@ func (ctx *Context) invokeCompileCommand(
 		Envs: exec_inst.Envs,
 	}
 
-	f := func(output *StreamOutput) {
-		callback(&StreamOutputResult{
+	f := func(output *StreamOutput) error {
+		return callback(&StreamOutputResult{
 			Mode: CompileMode,
 			Index: 0,
 			Output: output,
@@ -274,8 +274,8 @@ func (ctx *Context) invokeLinkCommand(
 		Envs: exec_inst.Envs,
 	}
 
-	f := func(output *StreamOutput) {
-		callback(&StreamOutputResult{
+	f := func(output *StreamOutput) error {
+		return callback(&StreamOutputResult{
 			Mode: LinkMode,
 			Index: 0,
 			Output: output,
@@ -372,8 +372,8 @@ func (ctx *Context) invokeRunCommand(
 		Envs: exec_inst.Envs,
 	}
 
-	f := func(output *StreamOutput) {
-		callback(&StreamOutputResult{
+	f := func(output *StreamOutput) error {
+		return callback(&StreamOutputResult{
 			Mode: RunMode,
 			Index: index,
 			Output: output,

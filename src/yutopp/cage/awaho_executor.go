@@ -162,7 +162,7 @@ func (exec *awahoSandboxExecutor) Execute(
 			return res.result, err
 
 		case <-time.After(time.Second * 2):
-			return nil, errors.New("Timeout")
+			return nil, errors.New("Timeout to get result from sandbox")
 		}
 	}()
 	if err != nil {
@@ -170,7 +170,14 @@ func (exec *awahoSandboxExecutor) Execute(
 	}
 
 	stdout_read_err := <-stdout_read_err_ch
+	if stdout_read_err != nil {
+		return nil, stdout_read_err
+	}
+
 	stderr_read_err := <-stderr_read_err_ch
+	if stderr_read_err != nil {
+		return nil, stderr_read_err
+	}
 
 	// make generic result
 	executed_result := &ExecutedResult{
@@ -186,7 +193,7 @@ func (exec *awahoSandboxExecutor) Execute(
 		SystemErrorMessage: result.SystemErrorMessage,
 	}
 
-	log.Printf("terminate", stdout_read_err, stderr_read_err, *result, *executed_result)
+	log.Printf("terminated awaho sandbox / %v / %v", *result, *executed_result)
 
 	return executed_result, nil
 }
@@ -313,7 +320,7 @@ func readPipeOutputAsync(
 					break
 				} else {
 					log.Printf("Read: Failed / %v", err)
-					ch <- nil	// TODO: change to err
+					ch <- fmt.Errorf("Failed to read pipe(%v) / %v", fdAs, err)
 					break
 				}
 			}
@@ -321,10 +328,14 @@ func readPipeOutputAsync(
 				copied := make([]byte, size)
 				copy(copied, buffer[:size])
 
-				callback(&StreamOutput{
+				if err := callback(&StreamOutput{
 					Fd: fdAs,
 					Buffer: copied,
-				})
+				}); err != nil {
+					log.Printf("Read: Error happend in callback / %v", err)
+					ch <- err
+					break
+				}
 			}
 
 			//log.Printf("=> %V", string(buffer[:size]))

@@ -127,7 +127,7 @@ func acceptRequestMessage(
 		return errors.New(fmt.Sprintf("Reciever error at acceptRequestMessage(%V)", err))
 	}
 
-	log.Printf("Server::Recieved: %s / %V\n", kind.String(), buffer)
+	// log.Printf("Server::Recieved: %s / %V\n", kind.String(), buffer)
 
 	// switch process by kind
 	switch kind {
@@ -163,19 +163,25 @@ func acceptTicketRequestMessage(
 	}
 
 	// execute ticket
-	log.Printf("ticket %V\n", ticket)
+	// log.Printf("ticket %V\n", ticket)
 
 	// callback function
 	error_happend := false
 	var comm_err error = nil
 	results_ch := make(chan interface{}, channelBuffer)
-	f := func(v interface{}) {
-		log.Printf("CALLBACK: %v", v)
+	f := func(v interface{}) error {
 		if error_happend {
 			log.Printf("ERROR CALLBACK: %v", v)
-			return
+			return errors.New("error flag")
 		}
-		results_ch <- v
+
+		select {
+		case results_ch <- v:	// push value
+		case <-time.After(3 * time.Second):
+			return errors.New("callback timeout")
+		}
+
+		return nil
 	}
 
 	reading_ch := make(chan error, 10)
@@ -202,8 +208,6 @@ func acceptTicketRequestMessage(
 				}
 				log.Printf("out: StreamOutputResult / %v", v.(*StreamOutputResult))
 
-				break
-
 			case *StreamExecutedResult:
 				log.Printf("in:  StreamExecutedResult / %v", v.(*StreamExecutedResult))
 
@@ -216,8 +220,6 @@ func acceptTicketRequestMessage(
 					return
 				}
 				log.Printf("out: StreamExecutedResult / %v", v.(*StreamExecutedResult))
-
-				break
 
 			case *term:
 				log.Println("in:  terminates")
@@ -242,7 +244,7 @@ func acceptTicketRequestMessage(
 	// execute ticket data
 	if err := context.ExecTicket(&ticket, f); err != nil {
 		fmt.Printf("Server::Failed to exec ticket (%s)\n", err.Error())
-		return errors.New(fmt.Sprintf("Failed to exec ticket (%s)", err.Error()))
+		return fmt.Errorf("Failed to exec ticket (%s)", err.Error())
 	}
 	results_ch <- &term{}
 

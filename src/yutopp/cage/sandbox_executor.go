@@ -43,7 +43,7 @@ type SandboxExecutionOption struct {
 	Envs			[]string
 }
 
-type ExecuteCallBackType	func(*StreamOutput)
+type ExecuteCallBackType	func(*StreamOutput) error
 type SandboxExecutor interface {
 	Execute(*SandboxExecutionOption, *os.File, ExecuteCallBackType) (*ExecutedResult, error)
 }
