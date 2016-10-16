@@ -8,13 +8,12 @@
 
 package torigoya
 
-
 // ========================================
 // For source codes, stdins
 type SourceData struct {
-	Name			string	`codec:"name"`
-	Data			[]byte	`codec:"data"`
-	IsCompressed	bool	`codec:"is_compressed"`
+	Name         string `codec:"name"`
+	Data         []byte `codec:"data"`
+	IsCompressed bool   `codec:"is_compressed"`
 }
 
 func (s *SourceData) convertToTextContent() (*TextContent, error) {
@@ -41,52 +40,49 @@ func convertSourcesToContents(
 	for i, s := range sources {
 		// collect file names
 		source_contents[i], err = s.convertToTextContent()
-		if err != nil { return nil,err }
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	return source_contents, nil
 }
 
-
 // ========================================
 type ExecutionSetting struct {
-	Args				[]string	`codec:"args"`
-	Envs				[]string	`codec:"envs"`
-	CpuTimeLimit		uint64		`codec:"cpu_time_limit"`
-	MemoryBytesLimit	uint64		`codec:"memory_bytes_limit"`
+	Args             []string `codec:"args"`
+	Envs             []string `codec:"envs"`
+	CpuTimeLimit     uint64   `codec:"cpu_time_limit"`
+	MemoryBytesLimit uint64   `codec:"memory_bytes_limit"`
 }
-
 
 // ========================================
 type BuildInstruction struct {
-	CompileSetting		*ExecutionSetting	`codec:"compile_setting"`
-	LinkSetting			*ExecutionSetting	`codec:"link_setting,omitempty"`
+	CompileSetting *ExecutionSetting `codec:"compile_setting"`
+	LinkSetting    *ExecutionSetting `codec:"link_setting,omitempty"`
 }
 
 func (build_inst *BuildInstruction) IsLinkIndependent() bool {
 	return build_inst.LinkSetting != nil
 }
 
-
 // ========================================
-type Input struct{
-	Stdin				*SourceData			`codec:"stdin,omitempty"`
-	RunSetting			*ExecutionSetting	`codec:"run_setting"`
+type Input struct {
+	Stdin      *SourceData       `codec:"stdin,omitempty"`
+	RunSetting *ExecutionSetting `codec:"run_setting"`
 }
-
 
 // ========================================
 type RunInstruction struct {
-	Inputs				[]Input			`codec:"inputs"`
+	Inputs []Input `codec:"inputs"`
 }
-
 
 // ========================================
 type Ticket struct {
-	BaseName		string				`codec:"base_name"`
-	Sources			[]*SourceData		`codec:"sources"`
-	BuildInst		*BuildInstruction	`codec:"build_inst,omitempty"`
-	RunInst			*RunInstruction		`codec:"run_inst,omitempty"`
+	BaseName  string            `codec:"base_name"`
+	Sources   []*SourceData     `codec:"sources"`
+	BuildInst *BuildInstruction `codec:"build_inst,omitempty"`
+	RunInst   *RunInstruction   `codec:"run_inst,omitempty"`
 }
 
 func (ticket *Ticket) IsBuildRequired() bool {

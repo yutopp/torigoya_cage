@@ -8,9 +8,8 @@
 
 package torigoya
 
-import(
+import (
 	"github.com/ugorji/go/codec"
 )
-
 
 var msgPackHandler codec.MsgpackHandle

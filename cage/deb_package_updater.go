@@ -10,21 +10,20 @@
 
 package torigoya
 
-import(
-	"fmt"
-	"strings"
-	"regexp"
+import (
 	"errors"
+	"fmt"
+	"log"
 	"os"
 	"os/exec"
-	"log"
+	"regexp"
+	"strings"
 )
 
-
 type DebPackageUpdater struct {
-	SourceListPath		string
-	PackagePrefix		string
-	InstallPrefix		string
+	SourceListPath string
+	PackagePrefix  string
+	InstallPrefix  string
 }
 
 func (u *DebPackageUpdater) Update() error {
@@ -72,7 +71,9 @@ func (u *DebPackageUpdater) Update() error {
 	formatted_packages := []string{}
 	for _, s := range packages {
 		matched := torigoyaDebPackageMatcher.FindStringSubmatch(s)
-		if len(matched) < 1 { continue }
+		if len(matched) < 1 {
+			continue
+		}
 		formatted_packages = append(formatted_packages, matched[1])
 	}
 

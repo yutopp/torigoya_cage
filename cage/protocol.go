@@ -9,36 +9,36 @@
 package torigoya
 
 import (
-	"fmt"
 	"bytes"
-    "encoding/binary"
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"io"
 
 	"github.com/ugorji/go/codec"
 )
 
-type MessageKind	uint8
+type MessageKind uint8
+
 const (
-	MessageKindIndexBegin				= MessageKind(0)
+	MessageKindIndexBegin = MessageKind(0)
 
 	// Sent from client
-	MessageKindTicketRequest			= MessageKind(1)
-	MessageKindUpdateRepositoryRequest	= MessageKind(2)
+	MessageKindTicketRequest           = MessageKind(1)
+	MessageKindUpdateRepositoryRequest = MessageKind(2)
 
 	// Sent from server
-	MessageKindOutputs					= MessageKind(7)
-	MessageKindResult					= MessageKind(8)
-	MessageKindSystemError				= MessageKind(9)
-	MessageKindExit						= MessageKind(10)
+	MessageKindOutputs     = MessageKind(7)
+	MessageKindResult      = MessageKind(8)
+	MessageKindSystemError = MessageKind(9)
+	MessageKindExit        = MessageKind(10)
 
-	MessageKindSystemResult				= MessageKind(11)
+	MessageKindSystemResult = MessageKind(11)
 
 	//
-	MessageKindIndexEnd					= MessageKind(11)
-	MessageKindInvalid					= MessageKind(0xff)
+	MessageKindIndexEnd = MessageKind(11)
+	MessageKindInvalid  = MessageKind(0xff)
 )
-
 
 func (k MessageKind) String() string {
 	switch k {
@@ -51,7 +51,7 @@ func (k MessageKind) String() string {
 	}
 }
 
-var TorigoyaProtocolSignature = [2]byte{0x54, 0x47}	// TP
+var TorigoyaProtocolSignature = [2]byte{0x54, 0x47} // TP
 // Signature		[2]byte		//
 // MessageKind		byte		//
 // Version			[4]byte		// uint32, little endian
@@ -59,9 +59,9 @@ var TorigoyaProtocolSignature = [2]byte{0x54, 0x47}	// TP
 // Message			[]byte		// data, msgpacked
 
 type TorigoyaProtocolFrame struct {
-	MessageKind		MessageKind	//
-	Version			uint32		//
-	Message			[]byte		// data, msgpacked
+	MessageKind MessageKind //
+	Version     uint32      //
+	Message     []byte      // data, msgpacked
 }
 
 //
@@ -73,7 +73,9 @@ func decodeToTorigoyaProtocol(reader io.Reader) (*TorigoyaProtocolFrame, error) 
 	var sig [2]byte
 	{
 		n, err := reader.Read(sig[:])
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		if n != 2 {
 			return nil, errors.New("invalid signature length")
 		}
@@ -86,7 +88,9 @@ func decodeToTorigoyaProtocol(reader io.Reader) (*TorigoyaProtocolFrame, error) 
 	var kind [1]uint8
 	{
 		n, err := reader.Read(kind[:])
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		if n != 1 {
 			return nil, errors.New("invalid kind length")
 		}
@@ -97,7 +101,9 @@ func decodeToTorigoyaProtocol(reader io.Reader) (*TorigoyaProtocolFrame, error) 
 	var version uint32
 	{
 		n, err := reader.Read(version_bs[:])
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		if n != 4 {
 			return nil, errors.New("invalid version length")
 		}
@@ -115,7 +121,9 @@ func decodeToTorigoyaProtocol(reader io.Reader) (*TorigoyaProtocolFrame, error) 
 	var length uint32
 	{
 		n, err := reader.Read(length_bs[:])
-		if err != nil { return nil, err }
+		if err != nil {
+			return nil, err
+		}
 		if n != 4 {
 			return nil, errors.New("invalid length length")
 		}
@@ -129,7 +137,7 @@ func decodeToTorigoyaProtocol(reader io.Reader) (*TorigoyaProtocolFrame, error) 
 	}
 
 	// message length limit: 1MiB
-	if length > 1 * 1024 * 1024 {
+	if length > 1*1024*1024 {
 		return nil, errors.New("Message length limitation")
 	}
 
@@ -148,8 +156,8 @@ func decodeToTorigoyaProtocol(reader io.Reader) (*TorigoyaProtocolFrame, error) 
 
 	return &TorigoyaProtocolFrame{
 		MessageKind: MessageKind(kind[0]),
-		Version: version,
-		Message: message,
+		Version:     version,
+		Message:     message,
 	}, nil
 
 	return nil, nil
@@ -157,10 +165,10 @@ func decodeToTorigoyaProtocol(reader io.Reader) (*TorigoyaProtocolFrame, error) 
 
 //
 func encodeToTorigoyaProtocol(
-	writer	io.Writer,
-	kind	MessageKind,
-	version	uint32,
-	object	interface{},
+	writer io.Writer,
+	kind MessageKind,
+	version uint32,
+	object interface{},
 ) error {
 	// encode data
 	var body_buffer []byte
@@ -174,7 +182,9 @@ func encodeToTorigoyaProtocol(
 		writer,
 		binary.LittleEndian,
 		TorigoyaProtocolSignature,
-	); err != nil { return err }
+	); err != nil {
+		return err
+	}
 
 	// write kind(1Bytes)
 	if kind < MessageKindIndexBegin || kind > MessageKindIndexEnd {
@@ -184,14 +194,18 @@ func encodeToTorigoyaProtocol(
 		writer,
 		binary.LittleEndian,
 		kind,
-	); err != nil { return err }
+	); err != nil {
+		return err
+	}
 
 	// write version(4Bytes)
 	if err := binary.Write(
 		writer,
 		binary.LittleEndian,
 		version,
-	); err != nil { return err }
+	); err != nil {
+		return err
+	}
 
 	// length(4Bytes)
 	length := uint32(len(body_buffer))
@@ -199,11 +213,15 @@ func encodeToTorigoyaProtocol(
 		writer,
 		binary.LittleEndian,
 		length,
-	); err != nil { return err }
+	); err != nil {
+		return err
+	}
 
 	// data(length Bytes)
 	n, err := writer.Write(body_buffer)
-	if err != nil { return err }
+	if err != nil {
+		return err
+	}
 	if uint32(n) != length {
 		return errors.New("Failed to write data: length are different")
 	}

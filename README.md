@@ -3,7 +3,7 @@ Server backend for Torigoya
 Sandbox environment is developed on [yutopp/awaho](https://github.com/yutopp/awaho)
 
 # Requrement
-- golang >= 1.2
+- golang >= 1.7.1
 - Awaho
 
 # Development

@@ -10,10 +10,10 @@
 
 package torigoya
 
-import(
-	"log"
+import (
 	"errors"
-    "os/exec"
+	"log"
+	"os/exec"
 )
 
 func (ctx *Context) UpdatePackages() error {
@@ -27,7 +27,7 @@ func (ctx *Context) UpdatePackages() error {
 	}
 
 	// TODO: fix it
-    log.Printf("= %s ============================", ctx.packageUpdater.GetInstallPrefix())
+	log.Printf("= %s ============================", ctx.packageUpdater.GetInstallPrefix())
 	out, err := exec.Command("/bin/ls", "-la", ctx.packageUpdater.GetInstallPrefix()).Output()
 	if err != nil {
 		log.Printf("error:: %s", err.Error())
@@ -36,5 +36,5 @@ func (ctx *Context) UpdatePackages() error {
 	}
 	log.Printf("==================================================\n")
 
-    return err
+	return err
 }

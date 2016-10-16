@@ -1,2 +1,0 @@
-# 10.0.2.2 will be gateway, used in Vagrant env
-deb [arch=amd64] http://10.0.2.2:8000/apt/ trusty main

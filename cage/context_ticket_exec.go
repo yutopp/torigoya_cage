@@ -10,13 +10,13 @@
 
 package torigoya
 
-import(
-	"log"
-	"fmt"
+import (
 	"errors"
+	"fmt"
+	"io/ioutil"
+	"log"
 	"os"
 	"sync"
-	"io/ioutil"
 
 	"github.com/jmcvetta/randutil"
 )
@@ -30,20 +30,19 @@ const (
 const guestHome = "/home/torigoya"
 
 var (
-	compileFailedError	= errors.New("compile failed")
-	linkFailedError		= errors.New("link failed")
-	buildFailedError	= errors.New("build failed")
+	compileFailedError = errors.New("compile failed")
+	linkFailedError    = errors.New("link failed")
+	buildFailedError   = errors.New("build failed")
 )
 
 //
-type invokeResultRecieverCallback		func(interface{}) error
-
+type invokeResultRecieverCallback func(interface{}) error
 
 // ========================================
 // ========================================
 func (ctx *Context) ExecTicket(
-	ticket				*Ticket,
-	callback			invokeResultRecieverCallback,
+	ticket *Ticket,
+	callback invokeResultRecieverCallback,
 ) error {
 	base_name, err := func() (string, error) {
 		if ticket.BaseName != "" {
@@ -71,7 +70,7 @@ func (ctx *Context) ExecTicket(
 	if ticket.IsBuildRequired() {
 		if err := ctx.execBuild(path_used_as_home, ticket.BuildInst, callback); err != nil {
 			if err == buildFailedError {
-				return nil	// not an error
+				return nil // not an error
 			} else {
 				return err
 			}
@@ -92,13 +91,12 @@ func (ctx *Context) ExecTicket(
 	return nil
 }
 
-
 // ========================================
 // ========================================
 func (ctx *Context) execBuild(
-	path_used_as_home	string,
-	build_inst			*BuildInstruction,
-	callback			invokeResultRecieverCallback,
+	path_used_as_home string,
+	build_inst *BuildInstruction,
+	callback invokeResultRecieverCallback,
 ) error {
 	log.Printf("$$$$$$$$$$ START build => %s\n", path_used_as_home)
 	defer log.Printf("$$$$$$$$$$ FINISH build  => %s\n", path_used_as_home)
@@ -136,9 +134,9 @@ func (ctx *Context) execBuild(
 }
 
 func (ctx *Context) execManagedRun(
-	path_used_as_home	string,
-	run_inst			*RunInstruction,
-	callback			invokeResultRecieverCallback,
+	path_used_as_home string,
+	run_inst *RunInstruction,
+	callback invokeResultRecieverCallback,
 ) []error {
 	log.Printf("$$$$$$$$$$ START run => %s\n", path_used_as_home)
 	defer log.Printf("$$$$$$$$$$ FINISH run => %s\n", path_used_as_home)
@@ -162,7 +160,9 @@ func (ctx *Context) execManagedRun(
 				callback,
 			); err != nil {
 				m.Lock()
-				if errs == nil { errs = make([]error, 0) }
+				if errs == nil {
+					errs = make([]error, 0)
+				}
 				errs = append(errs, err)
 				m.Unlock()
 			}
@@ -173,40 +173,39 @@ func (ctx *Context) execManagedRun(
 	return errs
 }
 
-
 // ========================================
 // ========================================
 func (ctx *Context) invokeCompileCommand(
-	path_used_as_home	string,
-	exec_inst			*ExecutionSetting,
-	callback			invokeResultRecieverCallback,
+	path_used_as_home string,
+	exec_inst *ExecutionSetting,
+	callback invokeResultRecieverCallback,
 ) error {
 	log.Println(">> called invokeCompileCommand")
 
 	opts := &SandboxExecutionOption{
-		Mounts:	[]MountOption{
+		Mounts: []MountOption{
 			MountOption{
-				HostPath: path_used_as_home,
-				GuestPath: guestHome,
+				HostPath:   path_used_as_home,
+				GuestPath:  guestHome,
 				IsReadOnly: false,
-				DoChown: true,
+				DoChown:    true,
 			},
 			MountOption{
-				HostPath: ctx.packageInstalledBasePath,
-				GuestPath: ctx.packageInstalledBasePath,
+				HostPath:   ctx.packageInstalledBasePath,
+				GuestPath:  ctx.packageInstalledBasePath,
 				IsReadOnly: true,
-				DoChown: false,
+				DoChown:    false,
 			},
 		},
 		GuestHomePath: guestHome,
 		Limits: &ResourceLimit{
-			Core: 0,							// Process can NOT create CORE file
-			Nofile: 512,						// Process can open 512 files
-			NProc: 30,							// Process can create processes to 30
-			MemLock: 1024,						// Process can lock 1024 Bytes by mlock(2)
-			CpuTime: exec_inst.CpuTimeLimit,	// sec
-			Memory: exec_inst.MemoryBytesLimit,	// bytes
-			FSize: 5 * 1024 * 1024,				// Process can writes a file only 5MiB
+			Core:    0,                          // Process can NOT create CORE file
+			Nofile:  512,                        // Process can open 512 files
+			NProc:   30,                         // Process can create processes to 30
+			MemLock: 1024,                       // Process can lock 1024 Bytes by mlock(2)
+			CpuTime: exec_inst.CpuTimeLimit,     // sec
+			Memory:  exec_inst.MemoryBytesLimit, // bytes
+			FSize:   5 * 1024 * 1024,            // Process can writes a file only 5MiB
 		},
 		Args: exec_inst.Args,
 		Envs: exec_inst.Envs,
@@ -214,8 +213,8 @@ func (ctx *Context) invokeCompileCommand(
 
 	f := func(output *StreamOutput) error {
 		return callback(&StreamOutputResult{
-			Mode: CompileMode,
-			Index: 0,
+			Mode:   CompileMode,
+			Index:  0,
 			Output: output,
 		})
 	}
@@ -226,8 +225,8 @@ func (ctx *Context) invokeCompileCommand(
 	}
 
 	callback(&StreamExecutedResult{
-		Mode: CompileMode,
-		Index: 0,
+		Mode:   CompileMode,
+		Index:  0,
 		Result: result,
 	})
 
@@ -239,36 +238,36 @@ func (ctx *Context) invokeCompileCommand(
 }
 
 func (ctx *Context) invokeLinkCommand(
-	path_used_as_home	string,
-	exec_inst			*ExecutionSetting,
-	callback			invokeResultRecieverCallback,
+	path_used_as_home string,
+	exec_inst *ExecutionSetting,
+	callback invokeResultRecieverCallback,
 ) error {
 	log.Println(">> called invokeLinkCommand")
 
 	opts := &SandboxExecutionOption{
-		Mounts:	[]MountOption{
+		Mounts: []MountOption{
 			MountOption{
-				HostPath: path_used_as_home,
-				GuestPath: guestHome,
+				HostPath:   path_used_as_home,
+				GuestPath:  guestHome,
 				IsReadOnly: false,
-				DoChown: true,
+				DoChown:    true,
 			},
 			MountOption{
-				HostPath: ctx.packageInstalledBasePath,
-				GuestPath: ctx.packageInstalledBasePath,
+				HostPath:   ctx.packageInstalledBasePath,
+				GuestPath:  ctx.packageInstalledBasePath,
 				IsReadOnly: true,
-				DoChown: false,
+				DoChown:    false,
 			},
 		},
 		GuestHomePath: guestHome,
 		Limits: &ResourceLimit{
-			Core: 0,							// Process can NOT create CORE file
-			Nofile: 512,						// Process can open 512 files
-			NProc: 30,							// Process can create processes to 30
-			MemLock: 1024,						// Process can lock 1024 Bytes by mlock(2)
-			CpuTime: 10,						// 10 sec
-			Memory: 2 * 1024 * 1024 * 1024,		// 2GiB[fixed]
-			FSize: 40 * 1024 * 1024,			// 40MiB[fixed]
+			Core:    0,                      // Process can NOT create CORE file
+			Nofile:  512,                    // Process can open 512 files
+			NProc:   30,                     // Process can create processes to 30
+			MemLock: 1024,                   // Process can lock 1024 Bytes by mlock(2)
+			CpuTime: 10,                     // 10 sec
+			Memory:  2 * 1024 * 1024 * 1024, // 2GiB[fixed]
+			FSize:   40 * 1024 * 1024,       // 40MiB[fixed]
 		},
 		Args: exec_inst.Args,
 		Envs: exec_inst.Envs,
@@ -276,8 +275,8 @@ func (ctx *Context) invokeLinkCommand(
 
 	f := func(output *StreamOutput) error {
 		return callback(&StreamOutputResult{
-			Mode: LinkMode,
-			Index: 0,
+			Mode:   LinkMode,
+			Index:  0,
 			Output: output,
 		})
 	}
@@ -288,8 +287,8 @@ func (ctx *Context) invokeLinkCommand(
 	}
 
 	callback(&StreamExecutedResult{
-		Mode: LinkMode,
-		Index: 0,
+		Mode:   LinkMode,
+		Index:  0,
 		Result: result,
 	})
 
@@ -301,10 +300,10 @@ func (ctx *Context) invokeLinkCommand(
 }
 
 func (ctx *Context) invokeRunCommand(
-	path_used_as_home	string,
-	index				int,
-	input				*Input,
-	callback			invokeResultRecieverCallback,
+	path_used_as_home string,
+	index int,
+	input *Input,
+	callback invokeResultRecieverCallback,
 ) error {
 	log.Println(">> called invokeRunInputCommand")
 
@@ -315,8 +314,10 @@ func (ctx *Context) invokeRunCommand(
 	if stdin != nil {
 		log.Println("use stdin")
 
-		f, err := ioutil.TempFile("", "torigoya-inputs-");
-		if err != nil { return err }
+		f, err := ioutil.TempFile("", "torigoya-inputs-")
+		if err != nil {
+			return err
+		}
 		defer f.Close()
 
 		n, err := f.Write(stdin.Data)
@@ -346,27 +347,27 @@ func (ctx *Context) invokeRunCommand(
 	opts := &SandboxExecutionOption{
 		Mounts: []MountOption{
 			MountOption{
-				HostPath: ctx.packageInstalledBasePath,
-				GuestPath: ctx.packageInstalledBasePath,
+				HostPath:   ctx.packageInstalledBasePath,
+				GuestPath:  ctx.packageInstalledBasePath,
 				IsReadOnly: true,
-				DoChown: false,
+				DoChown:    false,
 			},
 		},
-		Copies:	[]CopyOption{	// NOTE: NOT "Mount", to run async
+		Copies: []CopyOption{ // NOTE: NOT "Mount", to run async
 			CopyOption{
-				HostPath: path_used_as_home,
+				HostPath:  path_used_as_home,
 				GuestPath: guestHome,
 			},
 		},
 		GuestHomePath: guestHome,
 		Limits: &ResourceLimit{
-			Core: 0,							// Process can NOT create CORE file
-			Nofile: 512,						// Process can open 512 files
-			NProc: 30,							// Process can create processes to 30
-			MemLock: 1024,						// Process can lock 1024 Bytes by mlock(2)
-			CpuTime: exec_inst.CpuTimeLimit,	// sec
-			Memory: exec_inst.MemoryBytesLimit,	// bytes
-			FSize: 1 * 1024 * 1024,				// Process can writes a file only 1MB
+			Core:    0,                          // Process can NOT create CORE file
+			Nofile:  512,                        // Process can open 512 files
+			NProc:   30,                         // Process can create processes to 30
+			MemLock: 1024,                       // Process can lock 1024 Bytes by mlock(2)
+			CpuTime: exec_inst.CpuTimeLimit,     // sec
+			Memory:  exec_inst.MemoryBytesLimit, // bytes
+			FSize:   1 * 1024 * 1024,            // Process can writes a file only 1MB
 		},
 		Args: exec_inst.Args,
 		Envs: exec_inst.Envs,
@@ -374,8 +375,8 @@ func (ctx *Context) invokeRunCommand(
 
 	f := func(output *StreamOutput) error {
 		return callback(&StreamOutputResult{
-			Mode: RunMode,
-			Index: index,
+			Mode:   RunMode,
+			Index:  index,
 			Output: output,
 		})
 	}
@@ -387,8 +388,8 @@ func (ctx *Context) invokeRunCommand(
 
 	log.Printf(">> %v", result)
 	callback(&StreamExecutedResult{
-		Mode: RunMode,
-		Index: index,
+		Mode:   RunMode,
+		Index:  index,
 		Result: result,
 	})
 	log.Println("sandboxExecutor.Exit >> %v", result)
@@ -396,12 +397,11 @@ func (ctx *Context) invokeRunCommand(
 	return nil
 }
 
-
 // ========================================
 // ========================================
 func (ctx *Context) mapSources(
-	base_name			string,
-	sources				[]*SourceData,
+	base_name string,
+	sources []*SourceData,
 ) (string, error) {
 	// unpack source codes
 	source_contents, err := convertSourcesToContents(sources)
@@ -415,7 +415,7 @@ func (ctx *Context) mapSources(
 		source_contents,
 	)
 	if err != nil {
-		return "", errors.New("couldn't create multi target : " + err.Error());
+		return "", errors.New("couldn't create multi target : " + err.Error())
 	}
 
 	return user_home_dir_path, nil

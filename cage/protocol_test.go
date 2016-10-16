@@ -9,17 +9,16 @@
 package torigoya
 
 import (
-	_ "testing"
+	_ "fmt"
 	_ "net"
 	_ "os"
-	_ "fmt"
 	_ "path/filepath"
-	_ "time"
 	_ "strconv"
+	_ "testing"
+	_ "time"
 
 	_ "github.com/ugorji/go/codec"
 )
-
 
 /*
 func TestProtocolServer(t *testing.T) {

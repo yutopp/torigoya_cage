@@ -9,17 +9,15 @@
 package torigoya
 
 import (
-	"testing"
-	"os"
-	"fmt"
 	"bytes"
-	"sync"
-	"strconv"
 	"errors"
+	"fmt"
+	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
+	"testing"
 )
-
-
 
 /*
 func TestCreateTarget(t *testing.T) {
@@ -188,7 +186,6 @@ int main() {
 
 */
 
-
 func TestTicketBasicUnit(t *testing.T) {
 	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
@@ -223,7 +220,7 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -231,7 +228,7 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -242,9 +239,9 @@ int main() {
 			Input{
 				Stdin: nil,
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 10,
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
@@ -256,9 +253,9 @@ int main() {
 					false,
 				},
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 10,
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
@@ -267,10 +264,10 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: "",
-		Sources: sources,
+		BaseName:  "",
+		Sources:   sources,
 		BuildInst: build_inst,
-		RunInst: run_inst,
+		RunInst:   run_inst,
 	}
 
 	// execute
@@ -288,13 +285,13 @@ int main() {
 	expect_result := testExpectResult{
 		compile: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		link: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
@@ -302,14 +299,14 @@ int main() {
 			0: &testExpectResultUnit{
 				out: []byte("hello!\ninput is 0\n"),
 				status: &testExpectStatus{
-					exited: BoolOpt(true),
+					exited:     BoolOpt(true),
 					exitStatus: IntOpt(0),
 				},
 			},
 			1: &testExpectResultUnit{
 				out: []byte("hello!\ninput is 100\n"),
 				status: &testExpectStatus{
-					exited: BoolOpt(true),
+					exited:     BoolOpt(true),
 					exitStatus: IntOpt(0),
 				},
 			},
@@ -359,9 +356,9 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
-			CpuTimeLimit: 10,
+			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -369,7 +366,7 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -380,9 +377,9 @@ int main() {
 			Input{
 				Stdin: nil,
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 10,
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
@@ -391,10 +388,10 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: "",
-		Sources: sources,
+		BaseName:  "",
+		Sources:   sources,
 		BuildInst: build_inst,
-		RunInst: run_inst,
+		RunInst:   run_inst,
 	}
 
 	// execute
@@ -412,13 +409,13 @@ int main() {
 	expect_result := testExpectResult{
 		compile: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		link: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
@@ -426,7 +423,7 @@ int main() {
 			0: &testExpectResultUnit{
 				out: []byte("foo\n"),
 				status: &testExpectStatus{
-					exited: BoolOpt(true),
+					exited:     BoolOpt(true),
 					exitStatus: IntOpt(0),
 				},
 			},
@@ -575,9 +572,9 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
-			CpuTimeLimit: 10,
+			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -585,7 +582,7 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -596,9 +593,9 @@ int main() {
 			Input{
 				Stdin: nil,
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 10,
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
@@ -607,10 +604,10 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: "",
-		Sources: sources,
+		BaseName:  "",
+		Sources:   sources,
 		BuildInst: build_inst,
-		RunInst: run_inst,
+		RunInst:   run_inst,
 	}
 
 	// execute
@@ -628,13 +625,13 @@ int main() {
 	expect_result := testExpectResult{
 		compile: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		link: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
@@ -642,9 +639,9 @@ int main() {
 			0: &testExpectResultUnit{
 				out: []byte("hello!\n"),
 				status: &testExpectStatus{
-					exited: BoolOpt(false),
+					exited:   BoolOpt(false),
 					signaled: BoolOpt(true),
-					signal: IntOpt(9),
+					signal:   IntOpt(9),
 				},
 			},
 		},
@@ -682,9 +679,9 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
-			CpuTimeLimit: 10,
+			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -692,7 +689,7 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -703,9 +700,9 @@ int main() {
 			Input{
 				Stdin: nil,
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 10,
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
@@ -717,9 +714,9 @@ int main() {
 					false,
 				},
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 10,
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
@@ -728,23 +725,23 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: "",
-		Sources: sources,
+		BaseName:  "",
+		Sources:   sources,
 		BuildInst: build_inst,
-		RunInst: run_inst,
+		RunInst:   run_inst,
 	}
 
 	//
 	expect_result := testExpectResult{
 		compile: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		link: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
@@ -752,14 +749,14 @@ int main() {
 			0: &testExpectResultUnit{
 				out: []byte("hello!\ninput is 0\n"),
 				status: &testExpectStatus{
-					exited: BoolOpt(true),
+					exited:     BoolOpt(true),
 					exitStatus: IntOpt(0),
 				},
 			},
 			1: &testExpectResultUnit{
 				out: []byte("hello!\ninput is 100\n"),
 				status: &testExpectStatus{
-					exited: BoolOpt(true),
+					exited:     BoolOpt(true),
 					exitStatus: IntOpt(0),
 				},
 			},
@@ -795,7 +792,7 @@ int main() {
 			assertTestResult(t, &result, &expect_result)
 
 			m.Lock()
-			fx[no] = true	// succeeded
+			fx[no] = true // succeeded
 			m.Unlock()
 		}(i)
 	}
@@ -831,9 +828,9 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
-			CpuTimeLimit: 10,
+			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -841,16 +838,15 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
 
-
 	// run in parallel
 	wg := new(sync.WaitGroup)
 	m := new(sync.Mutex)
-	const num = 30	// More!
+	const num = 30 // More!
 	var fx [num]bool
 	for i := 0; i < num; i++ {
 		wg.Add(1)
@@ -871,9 +867,9 @@ int main() {
 							Data: []byte(strconv.Itoa(no)),
 						},
 						RunSetting: &ExecutionSetting{
-							Args: []string{"./prog.out"},
-							Envs: []string{},
-							CpuTimeLimit: 10,
+							Args:             []string{"./prog.out"},
+							Envs:             []string{},
+							CpuTimeLimit:     10,
 							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 						},
 					},
@@ -882,23 +878,23 @@ int main() {
 
 			//
 			ticket := &Ticket{
-				BaseName: "",
-				Sources: sources,
+				BaseName:  "",
+				Sources:   sources,
 				BuildInst: build_inst,
-				RunInst: run_inst,
+				RunInst:   run_inst,
 			}
 
 			//
 			expect_result := testExpectResult{
 				compile: testExpectResultUnit{
 					status: &testExpectStatus{
-						exited: BoolOpt(true),
+						exited:     BoolOpt(true),
 						exitStatus: IntOpt(0),
 					},
 				},
 				link: testExpectResultUnit{
 					status: &testExpectStatus{
-						exited: BoolOpt(true),
+						exited:     BoolOpt(true),
 						exitStatus: IntOpt(0),
 					},
 				},
@@ -906,7 +902,7 @@ int main() {
 					0: &testExpectResultUnit{
 						out: []byte(fmt.Sprintf("hello!\ninput is %d\n", no)),
 						status: &testExpectStatus{
-							exited: BoolOpt(true),
+							exited:     BoolOpt(true),
 							exitStatus: IntOpt(0),
 						},
 					},
@@ -926,7 +922,7 @@ int main() {
 			assertTestResult(t, &result, &expect_result)
 
 			m.Lock()
-			fx[no] = true	// succeeded
+			fx[no] = true // succeeded
 			m.Unlock()
 		}(i)
 	}
@@ -959,9 +955,9 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
-			CpuTimeLimit: 10,
+			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -969,7 +965,7 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -980,9 +976,9 @@ int main() {
 			Input{
 				Stdin: nil,
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 1,
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     1,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
@@ -991,10 +987,10 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: "",
-		Sources: sources,
+		BaseName:  "",
+		Sources:   sources,
 		BuildInst: build_inst,
-		RunInst: run_inst,
+		RunInst:   run_inst,
 	}
 
 	// execute
@@ -1012,20 +1008,20 @@ int main() {
 	expect_result := testExpectResult{
 		compile: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		link: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		run: map[int]*testExpectResultUnit{
 			0: &testExpectResultUnit{
 				status: &testExpectStatus{
-					exited: BoolOpt(false),		// killed
+					exited: BoolOpt(false), // killed
 				},
 			},
 		},
@@ -1060,9 +1056,9 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
-			CpuTimeLimit: 10,
+			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -1070,7 +1066,7 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -1081,9 +1077,9 @@ int main() {
 			Input{
 				Stdin: nil,
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 1,
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     1,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
@@ -1092,10 +1088,10 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: "",
-		Sources: sources,
+		BaseName:  "",
+		Sources:   sources,
 		BuildInst: build_inst,
-		RunInst: run_inst,
+		RunInst:   run_inst,
 	}
 
 	// execute
@@ -1113,20 +1109,20 @@ int main() {
 	expect_result := testExpectResult{
 		compile: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		link: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		run: map[int]*testExpectResultUnit{
 			0: &testExpectResultUnit{
 				status: &testExpectStatus{
-					exited: BoolOpt(false),		// killed
+					exited: BoolOpt(false), // killed
 				},
 			},
 		},
@@ -1166,9 +1162,9 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
-			CpuTimeLimit: 10,
+			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -1176,7 +1172,7 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -1186,13 +1182,13 @@ int main() {
 		Inputs: []Input{
 			Input{
 				Stdin: &SourceData{
-					Data: []byte("300000000"),	// 300MB
+					Data: []byte("300000000"), // 300MB
 				},
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 1,
-					MemoryBytesLimit: 200 * 1024 * 1024,	// 200MB
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     1,
+					MemoryBytesLimit: 200 * 1024 * 1024, // 200MB
 				},
 			},
 		},
@@ -1200,10 +1196,10 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: "",
-		Sources: sources,
+		BaseName:  "",
+		Sources:   sources,
 		BuildInst: build_inst,
-		RunInst: run_inst,
+		RunInst:   run_inst,
 	}
 
 	// execute
@@ -1221,20 +1217,20 @@ int main() {
 	expect_result := testExpectResult{
 		compile: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		link: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		run: map[int]*testExpectResultUnit{
 			0: &testExpectResultUnit{
 				status: &testExpectStatus{
-					exited: BoolOpt(false),		// killed
+					exited: BoolOpt(false), // killed
 				},
 			},
 		},
@@ -1271,9 +1267,9 @@ int main() {
 	//
 	build_inst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
-			CpuTimeLimit: 10,
+			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -1281,7 +1277,7 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
@@ -1292,9 +1288,9 @@ int main() {
 			Input{
 				Stdin: nil,
 				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 10,
+					Args:             []string{"./prog.out"},
+					Envs:             []string{},
+					CpuTimeLimit:     10,
 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 				},
 			},
@@ -1303,10 +1299,10 @@ int main() {
 
 	//
 	ticket := &Ticket{
-		BaseName: "",
-		Sources: sources,
+		BaseName:  "",
+		Sources:   sources,
 		BuildInst: build_inst,
-		RunInst: run_inst,
+		RunInst:   run_inst,
 	}
 
 	// execute
@@ -1319,7 +1315,7 @@ int main() {
 	}
 
 	expect_out := []byte{}
-	for i:=0; i<100000; i++ {
+	for i := 0; i < 100000; i++ {
 		expect_out = append(expect_out, fmt.Sprintf("%d\n", i)...)
 	}
 
@@ -1327,13 +1323,13 @@ int main() {
 	expect_result := testExpectResult{
 		compile: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
 		link: testExpectResultUnit{
 			status: &testExpectStatus{
-				exited: BoolOpt(true),
+				exited:     BoolOpt(true),
 				exitStatus: IntOpt(0),
 			},
 		},
@@ -1341,7 +1337,7 @@ int main() {
 			0: &testExpectResultUnit{
 				out: expect_out,
 				status: &testExpectStatus{
-					exited: BoolOpt(true),
+					exited:     BoolOpt(true),
 					exitStatus: IntOpt(0),
 				},
 			},
@@ -1351,7 +1347,6 @@ int main() {
 	//
 	assertTestResult(t, &result, &expect_result)
 }
-
 
 // ==================================================
 // ==================================================
@@ -1364,20 +1359,19 @@ func makeDefaultCtxOpt() *ContextOptions {
 	}
 
 	return &ContextOptions{
-		BasePath: gopath,
-		UserFilesBasePath: "/tmp/cage_test",
+		BasePath:                 gopath,
+		UserFilesBasePath:        "/tmp/cage_test",
 		PackageInstalledBasePath: "/usr/local/procgarden",
 
 		SandboxExec: executor,
 	}
 }
 
-
 // ==================================================
 // ==================================================
 //
 func assertTestResult(t *testing.T, result *test_result, expect *testExpectResult) {
-	assertUnit := func (tag string, result *test_result_unit, expect *testExpectResultUnit) {
+	assertUnit := func(tag string, result *test_result_unit, expect *testExpectResultUnit) {
 		// check status(a.k.a result)
 		if expect.status != nil {
 			// expected is specified
@@ -1479,31 +1473,28 @@ func assertTestResult(t *testing.T, result *test_result, expect *testExpectResul
 	}
 }
 
-
 type testExpectResult struct {
-	compile, link	testExpectResultUnit
-	run				map[int]*testExpectResultUnit
+	compile, link testExpectResultUnit
+	run           map[int]*testExpectResultUnit
 }
 type testExpectResultUnit struct {
-	out, err	[]byte
-	status		*testExpectStatus
+	out, err []byte
+	status   *testExpectStatus
 }
 type testExpectStatus struct {
-	exited				BoolOptionalType
-	exitStatus			IntOptionalType
-	signaled			BoolOptionalType
-	signal				IntOptionalType
+	exited     BoolOptionalType
+	exitStatus IntOptionalType
+	signaled   BoolOptionalType
+	signal     IntOptionalType
 }
-
-
 
 type test_result_unit struct {
-	out, err	[]byte
-	result		*ExecutedResult
+	out, err []byte
+	result   *ExecutedResult
 }
 type test_result struct {
-	compile, link	test_result_unit
-	run				map[int]*test_result_unit
+	compile, link test_result_unit
+	run           map[int]*test_result_unit
 }
 
 func makeHelperCallback(result *test_result) func(v interface{}) error {
@@ -1517,7 +1508,9 @@ func makeHelperCallback(result *test_result) func(v interface{}) error {
 			case LinkMode:
 				result.link.result = r.Result
 			case RunMode:
-				if result.run[r.Index] == nil { result.run[r.Index] = &test_result_unit{} }
+				if result.run[r.Index] == nil {
+					result.run[r.Index] = &test_result_unit{}
+				}
 				result.run[r.Index].result = r.Result
 			default:
 				return errors.New("unsupported mode.")
@@ -1547,7 +1540,9 @@ func makeHelperCallback(result *test_result) func(v interface{}) error {
 				}
 
 			case RunMode:
-				if result.run[r.Index] == nil { result.run[r.Index] = &test_result_unit{} }
+				if result.run[r.Index] == nil {
+					result.run[r.Index] = &test_result_unit{}
+				}
 				switch r.Output.Fd {
 				case StdoutFd:
 					result.run[r.Index].out = append(result.run[r.Index].out, r.Output.Buffer...)
@@ -1569,31 +1564,30 @@ func makeHelperCallback(result *test_result) func(v interface{}) error {
 	}
 }
 
-
 type OptionalBase struct {
-	Exists	bool
+	Exists bool
 }
 
 type IntOptionalType struct {
 	OptionalBase
-	Value	int
+	Value int
 }
 
 func IntOpt(v int) IntOptionalType {
 	return IntOptionalType{
 		OptionalBase: OptionalBase{true},
-		Value: v,
+		Value:        v,
 	}
 }
 
 type BoolOptionalType struct {
 	OptionalBase
-	Value	bool
+	Value bool
 }
 
 func BoolOpt(v bool) BoolOptionalType {
 	return BoolOptionalType{
 		OptionalBase: OptionalBase{true},
-		Value: v,
+		Value:        v,
 	}
 }

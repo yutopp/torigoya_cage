@@ -9,15 +9,15 @@
 package torigoya
 
 import (
-	"fmt"
-	"io"
 	"bytes"
 	"errors"
+	"fmt"
+	"io"
 )
 
 type ProtocolHandler struct {
-	Io			io.ReadWriter
-	Version		uint32
+	Io      io.ReadWriter
+	Version uint32
 }
 
 func (ph *ProtocolHandler) read() (MessageKind, []byte, error) {

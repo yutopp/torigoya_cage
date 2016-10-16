@@ -1,9 +1,7 @@
-/bin/
-/pkg/
-/config.yml
+torigoya_cage
 
-/.vagrant
-Vagrantfile
+glide.yaml
+vendor
 
-/recieved_files
-/test2
+config.yml
+recieved_files

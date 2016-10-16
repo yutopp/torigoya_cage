@@ -10,10 +10,9 @@
 
 package torigoya
 
-import(
+import (
 	"os"
 )
-
 
 func expectRoot() {
 	if os.Geteuid() != 0 {

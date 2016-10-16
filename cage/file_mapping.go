@@ -10,32 +10,30 @@
 
 package torigoya
 
-import(
+import (
+	"errors"
 	"fmt"
 	"log"
-	"errors"
 	"os"
 	"path/filepath"
 )
 
-
 func fileExists(filename string) bool {
 	_, err := os.Stat(filename)
-    return !os.IsNotExist(err)
+	return !os.IsNotExist(err)
 }
 
 const implicitDefaultName = "*default*"
 
 type TextContent struct {
-	Name		string
-	Data		[]byte
+	Name string
+	Data []byte
 }
-
 
 //
 func (ctx *Context) createMultipleTargets(
-	base_name			string,
-	sources				[]*TextContent,
+	base_name string,
+	sources []*TextContent,
 ) (string, error) {
 	return ctx.createMultipleTargetsWithDefaultName(
 		base_name,
@@ -45,9 +43,9 @@ func (ctx *Context) createMultipleTargets(
 }
 
 func (ctx *Context) createMultipleTargetsWithDefaultName(
-	base_name				string,
-	sources					[]*TextContent,
-	default_source_name		*string,
+	base_name string,
+	sources []*TextContent,
+	default_source_name *string,
 ) (string, error) {
 	log.Println(">> called createMultipleTargets")
 
@@ -76,7 +74,6 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 
 	return user_home_dir_path, nil
 }
-
 
 func (ctx *Context) createDir(dir_name string) error {
 	if fileExists(dir_name) {
@@ -107,9 +104,9 @@ func (ctx *Context) createDir(dir_name string) error {
 }
 
 func (ctx *Context) craeteUserSources(
-	user_home_dir_path	string,
-	sources				[]*TextContent,
-	default_source_name	*string,
+	user_home_dir_path string,
+	sources []*TextContent,
+	default_source_name *string,
 ) error {
 	// ========================================
 	//// make source file
@@ -133,12 +130,18 @@ func (ctx *Context) craeteUserSources(
 
 		source_full_path := filepath.Join(user_home_dir_path, source_name)
 		f, err := os.OpenFile(source_full_path, os.O_WRONLY|os.O_CREATE, 0600)
-		if err != nil { return err }
+		if err != nil {
+			return err
+		}
 		defer f.Close()
 
 		n, err := f.Write(source.Data)
-		if err != nil { return err }
-		if n != len(source.Data) { return errors.New("file length is different") }
+		if err != nil {
+			return err
+		}
+		if n != len(source.Data) {
+			return errors.New("file length is different")
+		}
 
 		log.Printf("source -> %s\n", source_full_path)
 

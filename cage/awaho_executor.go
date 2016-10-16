@@ -10,52 +10,53 @@
 
 package torigoya
 
-import(
-	"log"
-	"fmt"
-	"time"
+import (
+	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
-	"encoding/json"
 	"sync"
-	"io"
+	"time"
 )
 
 const ReadLength = 8096
 
 type awahoResult struct {
-	Exited				bool
-	ExitStatus			int
-	Signaled			bool
-	Signal				int
+	Exited     bool
+	ExitStatus int
+	Signaled   bool
+	Signal     int
 
-	SystemTimeMicroSec	float64
-	UserTimeMicroSec	float64
-	CpuTimeMicroSec		float64
+	SystemTimeMicroSec float64
+	UserTimeMicroSec   float64
+	CpuTimeMicroSec    float64
 
-	UsedMemoryBytes		uint64
+	UsedMemoryBytes uint64
 
-	SystemErrorStatus	int
-	SystemErrorMessage	string
+	SystemErrorStatus  int
+	SystemErrorMessage string
 }
 
 type resultPair struct {
-	result	*awahoResult
-	err		error
+	result *awahoResult
+	err    error
 }
 
-
 type awahoSandboxExecutor struct {
-	ExecutablePath		string
+	ExecutablePath string
 }
 
 func MakeAwahoSandboxExecutor(
-	executablePath		string,
+	executablePath string,
 ) (*awahoSandboxExecutor, error) {
 	cwd, err := os.Getwd()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 
 	path := func() string {
 		if filepath.IsAbs(executablePath) {
@@ -71,34 +72,40 @@ func MakeAwahoSandboxExecutor(
 }
 
 func (exec *awahoSandboxExecutor) Execute(
-	opts		*SandboxExecutionOption,
-	stdin_f		*os.File,					// nullable
-	callback	ExecuteCallBackType,
+	opts *SandboxExecutionOption,
+	stdin_f *os.File, // nullable
+	callback ExecuteCallBackType,
 ) (*ExecutedResult, error) {
 	log.Printf(">> AwahoSandboxExecutor::Execute path=%s\n", exec.ExecutablePath)
 
 	// for stdout / CLOSE_EXEC
 	stdout, stdout_dtor, err := makePipe()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer stdout_dtor()
 
 	// for stderr / CLOSE_EXEC
 	stderr, stderr_dtor, err := makePipe()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer stderr_dtor()
 
 	// for result / CLOSE_EXEC
 	result_p, result_p_dtor, err := makePipe()
-	if err != nil { return nil, err }
+	if err != nil {
+		return nil, err
+	}
 	defer result_p_dtor()
 
 	//
 	args := []string{
 		exec.ExecutablePath,
 		"--start-guest-path", opts.GuestHomePath,
-		"--pipe", "4:1",	// (stdout in sandbox)
-		"--pipe", "5:2",	// (stderr in sandbox)
-		"--result-fd", "6",	// result reciever
+		"--pipe", "4:1", // (stdout in sandbox)
+		"--pipe", "5:2", // (stderr in sandbox)
+		"--result-fd", "6", // result reciever
 		"--core", strconv.FormatUint(opts.Limits.Core, 10),
 		"--nofile", strconv.FormatUint(opts.Limits.Nofile, 10),
 		"--nproc", strconv.FormatUint(opts.Limits.NProc, 10),
@@ -109,7 +116,7 @@ func (exec *awahoSandboxExecutor) Execute(
 	}
 	if stdin_f != nil {
 		args = append(args, []string{
-			"--pipe", "3:0",	// (stdin in sandbox)
+			"--pipe", "3:0", // (stdin in sandbox)
 		}...)
 	}
 	args = append(args, exec.makeMountOptions(opts)...)
@@ -120,13 +127,13 @@ func (exec *awahoSandboxExecutor) Execute(
 
 	attr := os.ProcAttr{
 		Files: []*os.File{
-			nil,		// 0 (not be used)
-			os.Stdout,	// 1
-			os.Stderr,	// 2
-			stdin_f,	// 3 (stdin in sandbox)
-			stdout.w,	// 4 (stdout in sandbox)
-			stderr.w,	// 5 (stderr in sandbox)
-			result_p.w,	// 6 result reciever
+			nil,        // 0 (not be used)
+			os.Stdout,  // 1
+			os.Stderr,  // 2
+			stdin_f,    // 3 (stdin in sandbox)
+			stdout.w,   // 4 (stdout in sandbox)
+			stderr.w,   // 5 (stderr in sandbox)
+			result_p.w, // 6 result reciever
 		},
 		Env: []string{},
 	}
@@ -137,9 +144,15 @@ func (exec *awahoSandboxExecutor) Execute(
 		return nil, err
 	}
 
-	if err = stdout.w.Close(); err != nil { return nil, err }
-	if err = stderr.w.Close(); err != nil { return nil, err }
-	if err = result_p.w.Close(); err != nil { return nil, err }
+	if err = stdout.w.Close(); err != nil {
+		return nil, err
+	}
+	if err = stderr.w.Close(); err != nil {
+		return nil, err
+	}
+	if err = result_p.w.Close(); err != nil {
+		return nil, err
+	}
 
 	//
 	stdout_read_err_ch := readPipeOutputAsync(stdout, StdoutFd, callback)
@@ -181,15 +194,15 @@ func (exec *awahoSandboxExecutor) Execute(
 
 	// make generic result
 	executed_result := &ExecutedResult{
-		Exited: result.Exited,
+		Exited:     result.Exited,
 		ExitStatus: result.ExitStatus,
-		Signaled: result.Signaled,
-		Signal: result.Signal,
+		Signaled:   result.Signaled,
+		Signal:     result.Signal,
 
-		UsedCPUTimeSec: result.CpuTimeMicroSec / 1e6,	// micro sec to sec
+		UsedCPUTimeSec:  result.CpuTimeMicroSec / 1e6, // micro sec to sec
 		UsedMemoryBytes: result.UsedMemoryBytes,
 
-		SystemErrorStatus: result.SystemErrorStatus,
+		SystemErrorStatus:  result.SystemErrorStatus,
 		SystemErrorMessage: result.SystemErrorMessage,
 	}
 
@@ -198,15 +211,14 @@ func (exec *awahoSandboxExecutor) Execute(
 	return executed_result, nil
 }
 
-
 func (exec *awahoSandboxExecutor) makeMountOptions(
-	opts	*SandboxExecutionOption,
+	opts *SandboxExecutionOption,
 ) []string {
 	if opts.Mounts == nil {
 		return []string{}
 	}
 
-	xs := make([]string, len(opts.Mounts) * 2)
+	xs := make([]string, len(opts.Mounts)*2)
 	for _, mount := range opts.Mounts {
 		auxReadonly := func() string {
 			if mount.IsReadOnly {
@@ -227,7 +239,7 @@ func (exec *awahoSandboxExecutor) makeMountOptions(
 			xs,
 			[]string{
 				"--mount", mount.HostPath + ":" + mount.GuestPath + ":" + auxReadonly + ":" + auxChown,
-			}...
+			}...,
 		)
 	}
 
@@ -235,19 +247,19 @@ func (exec *awahoSandboxExecutor) makeMountOptions(
 }
 
 func (exec *awahoSandboxExecutor) makeCopyOptions(
-	opts	*SandboxExecutionOption,
+	opts *SandboxExecutionOption,
 ) []string {
 	if opts.Copies == nil {
 		return []string{}
 	}
 
-	xs := make([]string, len(opts.Copies) * 2)
+	xs := make([]string, len(opts.Copies)*2)
 	for _, copy := range opts.Copies {
 		xs = append(
 			xs,
 			[]string{
 				"--copy", copy.HostPath + ":" + copy.GuestPath,
-			}...
+			}...,
 		)
 	}
 
@@ -255,33 +267,34 @@ func (exec *awahoSandboxExecutor) makeCopyOptions(
 }
 
 func (exec *awahoSandboxExecutor) makeEnvOptions(
-	opts	*SandboxExecutionOption,
+	opts *SandboxExecutionOption,
 ) []string {
 	if opts.Envs == nil {
 		return []string{}
 	}
 
-	xs := make([]string, len(opts.Envs) * 2)
+	xs := make([]string, len(opts.Envs)*2)
 	for _, env := range opts.Envs {
 		xs = append(
-			xs, []string{"--env", env}...
+			xs, []string{"--env", env}...,
 		)
 	}
 
 	return xs
 }
 
-
 type pipeFiles struct {
-	r	*os.File		// io for read
-	w	*os.File		// io for write
-	m	*sync.Mutex		// mutex
+	r *os.File    // io for read
+	w *os.File    // io for write
+	m *sync.Mutex // mutex
 }
 
 func makePipe() (*pipeFiles, func(), error) {
 	stdout_m := new(sync.Mutex)
 	stdout_r, stdout_w, err := os.Pipe()
-	if err != nil { return nil, nil, err }
+	if err != nil {
+		return nil, nil, err
+	}
 
 	dtor := func() {
 		stdout_m.Lock()
@@ -298,9 +311,9 @@ func makePipe() (*pipeFiles, func(), error) {
 }
 
 func readPipeOutputAsync(
-	pipe		*pipeFiles,
-	fdAs		OutFd,
-	callback	ExecuteCallBackType,
+	pipe *pipeFiles,
+	fdAs OutFd,
+	callback ExecuteCallBackType,
 ) <-chan error {
 	ch := make(chan error)
 
@@ -329,7 +342,7 @@ func readPipeOutputAsync(
 				copy(copied, buffer[:size])
 
 				if err := callback(&StreamOutput{
-					Fd: fdAs,
+					Fd:     fdAs,
 					Buffer: copied,
 				}); err != nil {
 					log.Printf("Read: Error happend in callback / %v", err)
@@ -346,7 +359,7 @@ func readPipeOutputAsync(
 }
 
 func readResultAsync(
-	pipe		*pipeFiles,
+	pipe *pipeFiles,
 ) <-chan resultPair {
 	ch := make(chan resultPair)
 
@@ -358,11 +371,11 @@ func readResultAsync(
 
 		var result_detail awahoResult
 		if err := dec.Decode(&result_detail); err != nil {
-			ch <- resultPair{ nil, err }
+			ch <- resultPair{nil, err}
 			return
 		}
 
-		ch <- resultPair{ &result_detail, nil }
+		ch <- resultPair{&result_detail, nil}
 	}()
 
 	return ch

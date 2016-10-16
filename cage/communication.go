@@ -1,19 +1,18 @@
 package torigoya
 
 import (
-	"net"
-	"time"
-	"strconv"
 	"errors"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/ugorji/go/codec"
 )
-
 
 //
 const ServerVersion = uint32(20150715)
@@ -24,7 +23,7 @@ func RunServer(
 	host string,
 	port int,
 	context *Context,
-	notifier chan<-error,
+	notifier chan<- error,
 ) error {
 	if notifier == nil {
 		return errors.New("notifier must be specified")
@@ -68,7 +67,7 @@ func RunServer(
 
 func retryIfFailed(f func() error) (err error) {
 	// retry 5times if failed...
-	for i:=0; i<5; i++ {
+	for i := 0; i < 5; i++ {
 		if err = f(); err == nil {
 			// if there is no error
 			return nil
@@ -85,7 +84,7 @@ func handleConnection(c net.Conn, context *Context) {
 	log.Printf("[+] Server Connection %v\n", c)
 
 	handler := &ProtocolHandler{
-		Io: c,
+		Io:      c,
 		Version: ServerVersion,
 	}
 
@@ -95,7 +94,7 @@ func handleConnection(c net.Conn, context *Context) {
 				log.Printf("handleConnection::Failed: %v\n", err)
 				handler.writeSystemError(err.Error())
 			}
-        }
+		}
 
 		_ = retryIfFailed(func() error {
 			return handler.writeExit(c)
@@ -116,7 +115,6 @@ func handleConnection(c net.Conn, context *Context) {
 
 	log.Printf("    Resuest passed %v\n", c)
 }
-
 
 func acceptRequestMessage(
 	context *Context,
@@ -144,9 +142,8 @@ func acceptRequestMessage(
 	}
 }
 
-
 //
-type term struct {}
+type term struct{}
 
 func acceptTicketRequestMessage(
 	buffer []byte,
@@ -176,7 +173,7 @@ func acceptTicketRequestMessage(
 		}
 
 		select {
-		case results_ch <- v:	// push value
+		case results_ch <- v: // push value
 		case <-time.After(3 * time.Second):
 			return errors.New("callback timeout")
 		}
@@ -191,7 +188,7 @@ func acceptTicketRequestMessage(
 			if err != nil {
 				reading_ch <- err.(error)
 			}
-        }()
+		}()
 
 		for v := range results_ch {
 			switch v.(type) {
@@ -253,7 +250,6 @@ func acceptTicketRequestMessage(
 	return comm_err
 }
 
-
 //
 func acceptUpdateRepositoryRequest(
 	context *Context,
@@ -271,7 +267,6 @@ func acceptUpdateRepositoryRequest(
 
 	return nil
 }
-
 
 //
 func makeAddress(host string, port int) string {

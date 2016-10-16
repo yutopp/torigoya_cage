@@ -1,5 +1,5 @@
 //
-// Copyright yutopp 2014 - .
+// Copyright yutopp 2014 - 2016.
 //
 // Distributed under the Boost Software License, Version 1.0.
 // (See accompanying file LICENSE_1_0.txt or copy at
@@ -9,21 +9,21 @@
 package main
 
 import (
-	"log"
 	"flag"
 	"fmt"
-	"os"
 	"io/ioutil"
+	"log"
+	"os"
 
-	"yutopp/cage"
 	"gopkg.in/v1/yaml"
+	"torigoya_cage/cage"
 )
 
 type updaterConfig struct {
-	Type			string	`yaml:"type"`
-	DebSourceList	string	`yaml:"source_list"`
-	PackagePrefix	string	`yaml:"package_prefix"`
-	InstallPrefix	string	`yaml:"install_prefix"`
+	Type          string `yaml:"type"`
+	DebSourceList string `yaml:"source_list"`
+	PackagePrefix string `yaml:"package_prefix"`
+	InstallPrefix string `yaml:"install_prefix"`
 }
 
 func (c *updaterConfig) String() string {
@@ -31,8 +31,8 @@ func (c *updaterConfig) String() string {
 }
 
 type sandboxConfig struct {
-	Type			string	`yaml:"type"`
-	AwahoExecutable	string	`yaml:"executable_path"`
+	Type            string `yaml:"type"`
+	AwahoExecutable string `yaml:"executable_path"`
 }
 
 func (c *sandboxConfig) String() string {
@@ -40,11 +40,11 @@ func (c *sandboxConfig) String() string {
 }
 
 type Config map[string]*struct {
-	Host			string			`yaml:"host"`
-	Port			int				`yaml:"port"`
-	Updater			*updaterConfig	`yaml:"updater,omitempty"`
-	SandboxExecutor	*sandboxConfig	`yaml:"sandbox"`
-	IsDebugMode		bool			`yaml:"is_debug_mode"`
+	Host            string         `yaml:"host"`
+	Port            int            `yaml:"port"`
+	Updater         *updaterConfig `yaml:"updater,omitempty"`
+	SandboxExecutor *sandboxConfig `yaml:"sandbox"`
+	IsDebugMode     bool           `yaml:"is_debug_mode"`
 }
 
 //
@@ -91,8 +91,8 @@ func main() {
 		case "deb":
 			updater = &torigoya.DebPackageUpdater{
 				SourceListPath: target_config.Updater.DebSourceList,
-				PackagePrefix: target_config.Updater.PackagePrefix,
-				InstallPrefix: target_config.Updater.InstallPrefix,
+				PackagePrefix:  target_config.Updater.PackagePrefix,
+				InstallPrefix:  target_config.Updater.InstallPrefix,
 			}
 
 		default:
@@ -102,13 +102,12 @@ func main() {
 		}
 	}
 
-
 	if target_config.SandboxExecutor == nil {
 		log.Panicf("sandbox option is required")
 	}
 	var sandbox torigoya.SandboxExecutor = nil
 	switch target_config.SandboxExecutor.Type {
-		case "awaho":
+	case "awaho":
 		sandbox, err = torigoya.MakeAwahoSandboxExecutor(
 			target_config.SandboxExecutor.AwahoExecutable,
 		)
@@ -126,20 +125,19 @@ func main() {
 	log.Printf("==== Config ====")
 	log.Printf("Mode    :  %s", *mode)
 	log.Printf("Host    :  %s", target_config.Host)
-    log.Printf("Port    :  %d", target_config.Port)
+	log.Printf("Port    :  %d", target_config.Port)
 	if target_config.Updater != nil {
 		log.Printf("Updater :  %s", target_config.Updater)
 	}
 	log.Printf("Sandbox :  %s", target_config.SandboxExecutor)
 
-
 	// make context!
 	ctx_opt := &torigoya.ContextOptions{
-		BasePath: cwd,
-		UserFilesBasePath: "/tmp/cage_recieved_files",
+		BasePath:                 cwd,
+		UserFilesBasePath:        "/tmp/cage_recieved_files",
 		PackageInstalledBasePath: target_config.Updater.InstallPrefix,
 
-		SandboxExec: sandbox,
+		SandboxExec:    sandbox,
 		PackageUpdater: updater,
 	}
 	ctx, err := torigoya.InitContext(ctx_opt)
@@ -162,7 +160,7 @@ func main() {
 	log.Printf("Server initializing...\n")
 	e := make(chan error)
 	go func() {
-		if err := <- e; err != nil {
+		if err := <-e; err != nil {
 			log.Panicf("Server error: %v\n", err)
 		}
 		log.Printf("Server starts!\n")
