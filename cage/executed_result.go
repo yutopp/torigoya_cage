@@ -22,15 +22,17 @@ type StreamOutput struct {
 }
 
 type StreamOutputResult struct {
-	Mode   int           `codec:"mode"`
-	Index  int           `codec:"index"`
-	Output *StreamOutput `codec:"output"`
+	Mode      int           `codec:"mode"`
+	MainIndex int           `codec:"main_index"`
+	SubIndex  int           `codec:"sub_index"`
+	Output    *StreamOutput `codec:"output"`
 }
 
 type StreamExecutedResult struct {
-	Mode   int             `codec:"mode"`
-	Index  int             `codec:"index"`
-	Result *ExecutedResult `codec:"result"`
+	Mode      int             `codec:"mode"`
+	MainIndex int             `codec:"main_index"`
+	SubIndex  int             `codec:"sub_index"`
+	Result    *ExecutedResult `codec:"result"`
 }
 
 type ExecutedResult struct {

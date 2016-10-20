@@ -45,5 +45,6 @@ type SandboxExecutionOption struct {
 
 type ExecuteCallBackType func(*StreamOutput) error
 type SandboxExecutor interface {
+	DefaultMountOption() *MountOption
 	Execute(*SandboxExecutionOption, *os.File, ExecuteCallBackType) (*ExecutedResult, error)
 }

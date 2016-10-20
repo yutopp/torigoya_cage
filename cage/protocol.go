@@ -24,8 +24,7 @@ const (
 	MessageKindIndexBegin = MessageKind(0)
 
 	// Sent from client
-	MessageKindTicketRequest           = MessageKind(1)
-	MessageKindUpdateRepositoryRequest = MessageKind(2)
+	MessageKindTicketRequest = MessageKind(1)
 
 	// Sent from server
 	MessageKindOutputs     = MessageKind(7)
@@ -44,8 +43,6 @@ func (k MessageKind) String() string {
 	switch k {
 	case MessageKindTicketRequest:
 		return "MessageKindTicketRequest"
-	case MessageKindUpdateRepositoryRequest:
-		return "MessageKindUpdateRepositoryRequest"
 	default:
 		return fmt.Sprintf("Unknown(%d)", k)
 	}

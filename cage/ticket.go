@@ -8,6 +8,17 @@
 
 package torigoya
 
+//
+// Ticket[1]
+//   SourceCodes[N]
+//   BuildInst[1]
+//     CompileOption[1]
+//     LinkOption[1]
+//   RunInst[1]
+//     Input[1]
+//		 Stdin[1]
+//       ExecOption[1]
+
 // ========================================
 // For source codes, stdins
 type SourceData struct {
@@ -36,7 +47,6 @@ func convertSourcesToContents(
 ) (source_contents []*TextContent, err error) {
 	source_contents = make([]*TextContent, len(sources))
 
-	//
 	for i, s := range sources {
 		// collect file names
 		source_contents[i], err = s.convertToTextContent()
@@ -67,24 +77,24 @@ func (build_inst *BuildInstruction) IsLinkIndependent() bool {
 }
 
 // ========================================
-type Input struct {
+type RunInstruction struct {
 	Stdin      *SourceData       `codec:"stdin,omitempty"`
 	RunSetting *ExecutionSetting `codec:"run_setting"`
 }
 
 // ========================================
-type RunInstruction struct {
-	Inputs []Input `codec:"inputs"`
+type ExecutionSpec struct {
+	BuildInst *BuildInstruction `codec:"build_inst,omitempty"`
+	RunInsts  []*RunInstruction `codec:"run_insts,omitempty"`
+}
+
+func (spec *ExecutionSpec) IsBuildRequired() bool {
+	return spec.BuildInst != nil
 }
 
 // ========================================
 type Ticket struct {
-	BaseName  string            `codec:"base_name"`
-	Sources   []*SourceData     `codec:"sources"`
-	BuildInst *BuildInstruction `codec:"build_inst,omitempty"`
-	RunInst   *RunInstruction   `codec:"run_inst,omitempty"`
-}
-
-func (ticket *Ticket) IsBuildRequired() bool {
-	return ticket.BuildInst != nil
+	BaseName  string           `codec:"base_name"`
+	Sources   []*SourceData    `codec:"sources"`
+	ExecSpecs []*ExecutionSpec `codec:"exec_specs,omitempty"`
 }

@@ -64,7 +64,7 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 		return "", err
 	}
 
-	if err := ctx.craeteUserSources(
+	if err := ctx.createUserSources(
 		user_home_dir_path,
 		sources,
 		default_source_name,
@@ -77,11 +77,9 @@ func (ctx *Context) createMultipleTargetsWithDefaultName(
 
 func (ctx *Context) createDir(dir_name string) error {
 	if fileExists(dir_name) {
-		return errors.New(
-			fmt.Sprintf(
-				"directory %s is already existed",
-				dir_name,
-			),
+		return fmt.Errorf(
+			"directory %s is already existed",
+			dir_name,
 		)
 	}
 
@@ -103,7 +101,7 @@ func (ctx *Context) createDir(dir_name string) error {
 	return nil
 }
 
-func (ctx *Context) craeteUserSources(
+func (ctx *Context) createUserSources(
 	user_home_dir_path string,
 	sources []*TextContent,
 	default_source_name *string,

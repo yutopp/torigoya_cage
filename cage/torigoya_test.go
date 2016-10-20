@@ -11,11 +11,10 @@ package torigoya
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
-	"sync"
+	_ "strconv"
+	_ "sync"
 	"testing"
 )
 
@@ -234,89 +233,94 @@ int main() {
 	}
 
 	//
-	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				Stdin: nil,
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
+	run_insts := []*RunInstruction{
+		&RunInstruction{
+			Stdin: nil,
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 			},
+		},
+		&RunInstruction{
+			Stdin: &SourceData{
+				"hoge.in",
+				[]byte("100"),
+				false,
+			},
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+			},
+		},
+	}
 
-			Input{
-				Stdin: &SourceData{
-					"hoge.in",
-					[]byte("100"),
-					false,
-				},
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
-			},
+	exec_specs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: build_inst,
+			RunInsts:  run_insts,
 		},
 	}
 
 	//
 	ticket := &Ticket{
-		BaseName:  "",
+		BaseName:  "TestTicketBasicUnit",
 		Sources:   sources,
-		BuildInst: build_inst,
-		RunInst:   run_inst,
+		ExecSpecs: exec_specs,
 	}
 
 	// execute
-	var result test_result
-	result.run = make(map[int]*test_result_unit)
+	var result testResult
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
 		return
 	}
 
-	t.Logf("%V", result)
-
 	//
-	expect_result := testExpectResult{
-		compile: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		link: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		run: map[int]*testExpectResultUnit{
-			0: &testExpectResultUnit{
-				out: []byte("hello!\ninput is 0\n"),
-				status: &testExpectStatus{
-					exited:     BoolOpt(true),
-					exitStatus: IntOpt(0),
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
 				},
-			},
-			1: &testExpectResultUnit{
-				out: []byte("hello!\ninput is 100\n"),
-				status: &testExpectStatus{
-					exited:     BoolOpt(true),
-					exitStatus: IntOpt(0),
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						out: []byte("hello!\ninput is 0\n"),
+						status: &testExpectedStatus{
+							exited:     BoolOpt(true),
+							exitStatus: IntOpt(0),
+						},
+					},
+					testExpectedUnitResult{
+						out: []byte("hello!\ninput is 100\n"),
+						status: &testExpectedStatus{
+							exited:     BoolOpt(true),
+							exitStatus: IntOpt(0),
+						},
+					},
 				},
 			},
 		},
 	}
 
 	//
-	assertTestResult(t, &result, &expect_result)
+	assertTestResult(t, &result, &expectedResult)
 }
 
+/*
 func TestTicketMultiSource(t *testing.T) {
 	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
@@ -354,7 +358,7 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
 			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
 			Envs:             []string{},
@@ -372,17 +376,13 @@ int main() {
 	}
 
 	//
-	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				Stdin: nil,
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
-			},
+	runInst := &RunInstruction{
+		Stdin: nil,
+		RunSetting: &ExecutionSetting{
+			Args:             []string{"./prog.out"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
 
@@ -390,13 +390,13 @@ int main() {
 	ticket := &Ticket{
 		BaseName:  "",
 		Sources:   sources,
-		BuildInst: build_inst,
-		RunInst:   run_inst,
+		ExecSpecs: []*ExecutionSpec{
+			makeExecSpec(buildInst, []*RunInstruction{runInst}),
+		},
 	}
 
 	// execute
 	var result test_result
-	result.run = make(map[int]*test_result_unit)
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
@@ -419,13 +419,11 @@ int main() {
 				exitStatus: IntOpt(0),
 			},
 		},
-		run: map[int]*testExpectResultUnit{
-			0: &testExpectResultUnit{
-				out: []byte("foo\n"),
-				status: &testExpectStatus{
-					exited:     BoolOpt(true),
-					exitStatus: IntOpt(0),
-				},
+		run: testExpectResultUnit{
+			out: []byte("foo\n"),
+			status: &testExpectStatus{
+				exited:     BoolOpt(true),
+				exitStatus: IntOpt(0),
 			},
 		},
 	}
@@ -433,7 +431,7 @@ int main() {
 	//
 	assertTestResult(t, &result, &expect_result)
 }
-
+*/
 /*
 func TestTicketPS(t *testing.T) {
 	ctx, err := InitContext(makeDefaultCtxOpt())
@@ -536,7 +534,7 @@ int main() {
 	assertTestResult(t, &result, &expect_result)
 }
 */
-
+/*
 func TestTicketSignal(t *testing.T) {
 	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
@@ -589,15 +587,13 @@ int main() {
 
 	//
 	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				Stdin: nil,
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
+		Input: Input{
+			Stdin: nil,
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 			},
 		},
 	}
@@ -612,7 +608,6 @@ int main() {
 
 	// execute
 	var result test_result
-	result.run = make(map[int]*test_result_unit)
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
@@ -635,14 +630,12 @@ int main() {
 				exitStatus: IntOpt(0),
 			},
 		},
-		run: map[int]*testExpectResultUnit{
-			0: &testExpectResultUnit{
-				out: []byte("hello!\n"),
-				status: &testExpectStatus{
-					exited:   BoolOpt(false),
-					signaled: BoolOpt(true),
-					signal:   IntOpt(9),
-				},
+		run: testExpectResultUnit{
+			out: []byte("hello!\n"),
+			status: &testExpectStatus{
+				exited:   BoolOpt(false),
+				signaled: BoolOpt(true),
+				signal:   IntOpt(9),
 			},
 		},
 	}
@@ -696,31 +689,30 @@ int main() {
 
 	//
 	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				Stdin: nil,
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
-			},
-
-			Input{
-				Stdin: &SourceData{
-					"hoge.in",
-					[]byte("100"),
-					false,
-				},
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
+		Input: Input{
+			Stdin: nil,
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 			},
 		},
+
+		// 			Input{
+		// 				Stdin: &SourceData{
+		// 					"hoge.in",
+		// 					[]byte("100"),
+		// 					false,
+		// 				},
+		// 				RunSetting: &ExecutionSetting{
+		// 					Args:             []string{"./prog.out"},
+		// 					Envs:             []string{},
+		// 					CpuTimeLimit:     10,
+		// 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		// 				},
+		// 			},
+		// 		},
 	}
 
 	//
@@ -745,21 +737,19 @@ int main() {
 				exitStatus: IntOpt(0),
 			},
 		},
-		run: map[int]*testExpectResultUnit{
-			0: &testExpectResultUnit{
-				out: []byte("hello!\ninput is 0\n"),
-				status: &testExpectStatus{
-					exited:     BoolOpt(true),
-					exitStatus: IntOpt(0),
-				},
+		run: testExpectResultUnit{
+			out: []byte("hello!\ninput is 0\n"),
+			status: &testExpectStatus{
+				exited:     BoolOpt(true),
+				exitStatus: IntOpt(0),
 			},
-			1: &testExpectResultUnit{
-				out: []byte("hello!\ninput is 100\n"),
-				status: &testExpectStatus{
-					exited:     BoolOpt(true),
-					exitStatus: IntOpt(0),
-				},
-			},
+			// 			1: &testExpectResultUnit{
+			// 				out: []byte("hello!\ninput is 100\n"),
+			// 				status: &testExpectStatus{
+			// 					exited:     BoolOpt(true),
+			// 					exitStatus: IntOpt(0),
+			// 				},
+			// 			},
 		},
 	}
 
@@ -781,7 +771,6 @@ int main() {
 
 			// execute
 			var result test_result
-			result.run = make(map[int]*test_result_unit)
 			f := makeHelperCallback(&result)
 			if err := ctx.ExecTicket(ticket, f); err != nil {
 				t.Errorf(err.Error())
@@ -861,17 +850,15 @@ int main() {
 
 			//
 			run_inst := &RunInstruction{
-				Inputs: []Input{
-					Input{
-						Stdin: &SourceData{
-							Data: []byte(strconv.Itoa(no)),
-						},
-						RunSetting: &ExecutionSetting{
-							Args:             []string{"./prog.out"},
-							Envs:             []string{},
-							CpuTimeLimit:     10,
-							MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-						},
+				Input: Input{
+					Stdin: &SourceData{
+						Data: []byte(strconv.Itoa(no)),
+					},
+					RunSetting: &ExecutionSetting{
+						Args:             []string{"./prog.out"},
+						Envs:             []string{},
+						CpuTimeLimit:     10,
+						MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 					},
 				},
 			}
@@ -898,20 +885,17 @@ int main() {
 						exitStatus: IntOpt(0),
 					},
 				},
-				run: map[int]*testExpectResultUnit{
-					0: &testExpectResultUnit{
-						out: []byte(fmt.Sprintf("hello!\ninput is %d\n", no)),
-						status: &testExpectStatus{
-							exited:     BoolOpt(true),
-							exitStatus: IntOpt(0),
-						},
+				run: testExpectResultUnit{
+					out: []byte(fmt.Sprintf("hello!\ninput is %d\n", no)),
+					status: &testExpectStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
 					},
 				},
 			}
 
 			// execute
 			var result test_result
-			result.run = make(map[int]*test_result_unit)
 			f := makeHelperCallback(&result)
 			if err := ctx.ExecTicket(ticket, f); err != nil {
 				t.Errorf(err.Error())
@@ -972,15 +956,13 @@ int main() {
 
 	//
 	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				Stdin: nil,
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     1,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
+		Input: Input{
+			Stdin: nil,
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     1,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 			},
 		},
 	}
@@ -995,7 +977,6 @@ int main() {
 
 	// execute
 	var result test_result
-	result.run = make(map[int]*test_result_unit)
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
@@ -1018,11 +999,9 @@ int main() {
 				exitStatus: IntOpt(0),
 			},
 		},
-		run: map[int]*testExpectResultUnit{
-			0: &testExpectResultUnit{
-				status: &testExpectStatus{
-					exited: BoolOpt(false), // killed
-				},
+		run: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(false), // killed
 			},
 		},
 	}
@@ -1073,15 +1052,13 @@ int main() {
 
 	//
 	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				Stdin: nil,
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     1,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
+		Input: Input{
+			Stdin: nil,
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     1,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 			},
 		},
 	}
@@ -1096,7 +1073,6 @@ int main() {
 
 	// execute
 	var result test_result
-	result.run = make(map[int]*test_result_unit)
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
@@ -1119,11 +1095,9 @@ int main() {
 				exitStatus: IntOpt(0),
 			},
 		},
-		run: map[int]*testExpectResultUnit{
-			0: &testExpectResultUnit{
-				status: &testExpectStatus{
-					exited: BoolOpt(false), // killed
-				},
+		run: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(false), // killed
 			},
 		},
 	}
@@ -1179,17 +1153,16 @@ int main() {
 
 	//
 	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				Stdin: &SourceData{
-					Data: []byte("300000000"), // 300MB
-				},
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     1,
-					MemoryBytesLimit: 200 * 1024 * 1024, // 200MB
-				},
+		Input: Input{
+
+			Stdin: &SourceData{
+				Data: []byte("300000000"), // 300MB
+			},
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     1,
+				MemoryBytesLimit: 200 * 1024 * 1024, // 200MB
 			},
 		},
 	}
@@ -1204,7 +1177,6 @@ int main() {
 
 	// execute
 	var result test_result
-	result.run = make(map[int]*test_result_unit)
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
@@ -1227,11 +1199,9 @@ int main() {
 				exitStatus: IntOpt(0),
 			},
 		},
-		run: map[int]*testExpectResultUnit{
-			0: &testExpectResultUnit{
-				status: &testExpectStatus{
-					exited: BoolOpt(false), // killed
-				},
+		run: testExpectResultUnit{
+			status: &testExpectStatus{
+				exited: BoolOpt(false), // killed
 			},
 		},
 	}
@@ -1284,15 +1254,14 @@ int main() {
 
 	//
 	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				Stdin: nil,
-				RunSetting: &ExecutionSetting{
-					Args:             []string{"./prog.out"},
-					Envs:             []string{},
-					CpuTimeLimit:     10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
+		Input: Input{
+
+			Stdin: nil,
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 			},
 		},
 	}
@@ -1307,7 +1276,6 @@ int main() {
 
 	// execute
 	var result test_result
-	result.run = make(map[int]*test_result_unit)
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
@@ -1333,13 +1301,11 @@ int main() {
 				exitStatus: IntOpt(0),
 			},
 		},
-		run: map[int]*testExpectResultUnit{
-			0: &testExpectResultUnit{
-				out: expect_out,
-				status: &testExpectStatus{
-					exited:     BoolOpt(true),
-					exitStatus: IntOpt(0),
-				},
+		run: testExpectResultUnit{
+			out: expect_out,
+			status: &testExpectStatus{
+				exited:     BoolOpt(true),
+				exitStatus: IntOpt(0),
 			},
 		},
 	}
@@ -1347,31 +1313,31 @@ int main() {
 	//
 	assertTestResult(t, &result, &expect_result)
 }
-
+*/
 // ==================================================
 // ==================================================
 //
 func makeDefaultCtxOpt() *ContextOptions {
-	gopath := os.Getenv("GOPATH")
+	baseDir := os.Getenv("TORIGOYA_TEST_BASE_DIR")
 
 	executor := &awahoSandboxExecutor{
-		ExecutablePath: filepath.Join(gopath, "_awaho/awaho"),
+		ExecutablePath: filepath.Join(baseDir, "_awaho/awaho"),
+		HostMountDir:   filepath.Join(baseDir, "_env_test"),
+		GuestMountDir:  "/usr/local/procgarden",
 	}
 
 	return &ContextOptions{
-		BasePath:                 gopath,
-		UserFilesBasePath:        "/tmp/cage_test",
-		PackageInstalledBasePath: "/usr/local/procgarden",
-
-		SandboxExec: executor,
+		BasePath:          baseDir,
+		UserFilesBasePath: "/tmp/cage_test",
+		SandboxExec:       executor,
 	}
 }
 
 // ==================================================
 // ==================================================
 //
-func assertTestResult(t *testing.T, result *test_result, expect *testExpectResult) {
-	assertUnit := func(tag string, result *test_result_unit, expect *testExpectResultUnit) {
+func assertTestResult(t *testing.T, result *testResult, expect *testExpectedResult) {
+	assertUnit := func(tag string, result *testUnitResult, expect *testExpectedUnitResult) {
 		// check status(a.k.a result)
 		if expect.status != nil {
 			// expected is specified
@@ -1452,102 +1418,178 @@ func assertTestResult(t *testing.T, result *test_result, expect *testExpectResul
 		}
 	}
 
-	assertUnit("compile", &result.compile, &expect.compile)
-	assertUnit("link   ", &result.link, &expect.link)
-
-	// run
-	checked := make(map[int]bool)
-	for key, result_unit := range result.run {
-		expect_unit, ok := expect.run[key]
-		if !ok {
-			t.Fatalf("Unexpected key(%d)", key)
+	if len(expect.execResults) != len(result.execResults) {
+		t.Fatalf("[ERROR] len(expect.execResults)'%d' != len(result.execResults)'%d'",
+			len(expect.execResults),
+			len(result.execResults))
+	}
+	for execIndex, execExpected := range expect.execResults {
+		execResult := result.execResults[execIndex]
+		if execResult == nil {
+			t.Fatalf("[ERROR] execResults[%d] is nil", execIndex)
 		}
-		assertUnit(fmt.Sprintf("run:%d", key), result_unit, expect_unit)
-		checked[key] = true
+
+		assertUnit("compile", &execResult.compile, &execExpected.compile)
+		assertUnit("compile", &execResult.link, &execExpected.link)
+
+		// run
+		if len(execExpected.run) != len(execResult.run) {
+			t.Fatalf("[ERROR] len(execExpected.run)'%d' != len(execResult.run)'%d'",
+				len(execExpected.run),
+				len(execResult.run))
+		}
+		for execRunIndex, execRunExpected := range execExpected.run {
+			execRunResult := execResult.run[execRunIndex]
+			if execResult == nil {
+				t.Fatalf("[ERROR] execResults[%d].run[%d] is nil", execIndex, execRunIndex)
+			}
+
+			assertUnit("compile", execRunResult, &execRunExpected)
+		}
 	}
 
-	for key, _ := range expect.run {
-		if _, ok := checked[key]; !ok {
-			t.Fatalf("The key(%d) was not checked", key)
-		}
+	// 	assertUnit("compile", &result.compile, &expect.compile)
+	// 	assertUnit("link   ", &result.link, &expect.link)
+	// 	assertUnit("run    ", &result.run, &expect.run)
+	//
+	// 	// run
+	// 	checked := make(map[int]bool)
+	// 	for key, result_unit := range result.run {
+	// 		expect_unit, ok := expect.run[key]
+	// 		if !ok {
+	// 			t.Fatalf("Unexpected key(%d)", key)
+	// 		}
+	// 		assertUnit(fmt.Sprintf("run:%d", key), result_unit, expect_unit)
+	// 		checked[key] = true
+	// 	}
+	//
+	// 	for key, _ := range expect.run {
+	// 		if _, ok := checked[key]; !ok {
+	// 			t.Fatalf("The key(%d) was not checked", key)
+	// 		}
+	// 	}
+}
+
+func makeExecSpec(buildInst *BuildInstruction, runInsts []*RunInstruction) *ExecutionSpec {
+	return &ExecutionSpec{
+		BuildInst: buildInst,
+		RunInsts:  runInsts,
 	}
 }
 
-type testExpectResult struct {
-	compile, link testExpectResultUnit
-	run           map[int]*testExpectResultUnit
-}
-type testExpectResultUnit struct {
-	out, err []byte
-	status   *testExpectStatus
-}
-type testExpectStatus struct {
+//
+type testExpectedStatus struct {
 	exited     BoolOptionalType
 	exitStatus IntOptionalType
 	signaled   BoolOptionalType
 	signal     IntOptionalType
 }
+type testExpectedUnitResult struct {
+	out, err []byte
+	status   *testExpectedStatus
+}
+type testExpectedExecResult struct {
+	compile, link testExpectedUnitResult
+	run           []testExpectedUnitResult
+}
+type testExpectedResult struct {
+	execResults []testExpectedExecResult
+}
 
-type test_result_unit struct {
+//
+type testUnitResult struct {
 	out, err []byte
 	result   *ExecutedResult
 }
-type test_result struct {
-	compile, link test_result_unit
-	run           map[int]*test_result_unit
+type testExecResult struct {
+	compile, link testUnitResult
+	run           map[int]*testUnitResult
+}
+type testResult struct {
+	execResults map[int]*testExecResult
 }
 
-func makeHelperCallback(result *test_result) func(v interface{}) error {
+func makeHelperCallback(result *testResult) func(v interface{}) error {
+	assumeExecResultHasValue := func(index int) {
+		if result.execResults == nil {
+			result.execResults = make(map[int]*testExecResult)
+		}
+		if result.execResults[index] == nil {
+			result.execResults[index] = &testExecResult{}
+		}
+	}
+
+	assumeUnitResultInRunHasValue := func(execResult *testExecResult, index int) {
+		if execResult.run == nil {
+			execResult.run = make(map[int]*testUnitResult)
+		}
+		if execResult.run[index] == nil {
+			execResult.run[index] = &testUnitResult{}
+		}
+	}
+
 	return func(v interface{}) error {
 		switch v.(type) {
 		case *StreamExecutedResult:
 			r := v.(*StreamExecutedResult)
+
+			assumeExecResultHasValue(r.MainIndex)
+			execResult := result.execResults[r.MainIndex]
+
 			switch r.Mode {
 			case CompileMode:
-				result.compile.result = r.Result
+				unitResult := &execResult.compile
+				unitResult.result = r.Result
 			case LinkMode:
-				result.link.result = r.Result
+				unitResult := &execResult.link
+				unitResult.result = r.Result
 			case RunMode:
-				if result.run[r.Index] == nil {
-					result.run[r.Index] = &test_result_unit{}
-				}
-				result.run[r.Index].result = r.Result
+				assumeUnitResultInRunHasValue(execResult, r.SubIndex)
+				unitResult := execResult.run[r.SubIndex]
+
+				unitResult.result = r.Result
 			default:
 				return errors.New("unsupported mode.")
 			}
 
 		case *StreamOutputResult:
 			r := v.(*StreamOutputResult)
+
+			assumeExecResultHasValue(r.MainIndex)
+			execResult := result.execResults[r.MainIndex]
+
 			switch r.Mode {
 			case CompileMode:
+				unitResult := &execResult.compile
 				switch r.Output.Fd {
 				case StdoutFd:
-					result.compile.out = append(result.compile.out, r.Output.Buffer...)
+					unitResult.out = append(unitResult.out, r.Output.Buffer...)
 				case StderrFd:
-					result.compile.err = append(result.compile.err, r.Output.Buffer...)
+					unitResult.err = append(unitResult.err, r.Output.Buffer...)
 				default:
 					return errors.New("unsupported fd.")
 				}
 
 			case LinkMode:
+				unitResult := &execResult.link
 				switch r.Output.Fd {
 				case StdoutFd:
-					result.link.out = append(result.link.out, r.Output.Buffer...)
+					unitResult.out = append(unitResult.out, r.Output.Buffer...)
 				case StderrFd:
-					result.link.err = append(result.link.err, r.Output.Buffer...)
+					unitResult.err = append(unitResult.err, r.Output.Buffer...)
 				default:
 					return errors.New("unsupported fd.")
 				}
 
 			case RunMode:
-				if result.run[r.Index] == nil {
-					result.run[r.Index] = &test_result_unit{}
-				}
+				assumeUnitResultInRunHasValue(execResult, r.SubIndex)
+				unitResult := execResult.run[r.SubIndex]
+
 				switch r.Output.Fd {
 				case StdoutFd:
-					result.run[r.Index].out = append(result.run[r.Index].out, r.Output.Buffer...)
+					unitResult.out = append(unitResult.out, r.Output.Buffer...)
 				case StderrFd:
-					result.run[r.Index].err = append(result.run[r.Index].err, r.Output.Buffer...)
+					unitResult.err = append(unitResult.err, r.Output.Buffer...)
 				default:
 					return errors.New("unsupported fd.")
 				}

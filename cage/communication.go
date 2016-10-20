@@ -133,10 +133,6 @@ func acceptRequestMessage(
 		// accept ticket execution request
 		return acceptTicketRequestMessage(buffer, context, handler)
 
-	case MessageKindUpdateRepositoryRequest:
-		// install/upgrade APT repository
-		return acceptUpdateRepositoryRequest(context, handler)
-
 	default:
 		return errors.New(fmt.Sprintf("Server can not accept message (%d)", kind))
 	}
@@ -250,25 +246,6 @@ func acceptTicketRequestMessage(
 	return comm_err
 }
 
-//
-func acceptUpdateRepositoryRequest(
-	context *Context,
-	handler *ProtocolHandler,
-) error {
-	if err := context.UpdatePackages(); err != nil {
-		return err
-	}
-
-	if err := retryIfFailed(func() error {
-		return handler.writeSystemResult(0)
-	}); err != nil {
-		return errors.New("Failed to send system request: " + err.Error())
-	}
-
-	return nil
-}
-
-//
 func makeAddress(host string, port int) string {
 	return host + ":" + strconv.Itoa(port)
 }

@@ -1,20 +1,19 @@
 release:
   host: "0.0.0.0"
-  port: 23432
-  updater:
-    type: "deb"
-    source_list: "sources.list.d/torigoya-packages.list"
-    package_prefix: "procgarden-"
-    install_prefix: "/usr/local/procgarden"
+  port: 6000
   sandbox:
     type: "awaho"
     executable_path: "./_awaho/awaho"
+    host_mount_dir: "/usr/local/procgarden"
+    guest_mount_dir: "/usr/local/procgarden"
   is_debug_mode: false
 
-system_test_mode:
-  host: "0.0.0.0"
-  port: 49800
-  updater:
-    type: "deb"
-    source_list: "sources.list.d/torigoya-packages-debug.list"
+debug:
+  host: "127.0.0.1"
+  port: 6000
+  sandbox:
+    type: "awaho"
+    executable_path: "./_awaho/awaho"
+    host_mount_dir: "./_env_test"
+    guest_mount_dir: "/usr/local/procgarden"
   is_debug_mode: true

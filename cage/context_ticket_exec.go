@@ -17,8 +17,7 @@ import (
 	"log"
 	"os"
 	"sync"
-
-	"github.com/jmcvetta/randutil"
+	"time"
 )
 
 const (
@@ -44,31 +43,63 @@ func (ctx *Context) ExecTicket(
 	ticket *Ticket,
 	callback invokeResultRecieverCallback,
 ) error {
-	base_name, err := func() (string, error) {
-		if ticket.BaseName != "" {
-			return ticket.BaseName, nil
-		} else {
-			return randutil.AlphaString(32)
-		}
-	}()
-	if err != nil {
-		return err
+	baseName := ticket.BaseName
+	if baseName == "" {
+		return errors.New("ticket.BaseName cannot be empty")
 	}
 
-	log.Printf("-- START ticket => %s\n", base_name)
-	defer log.Printf("-- FINISH ticket  => %s\n", base_name)
+	log.Printf("-- START ticket => %s\n", baseName)
+	defer log.Printf("-- FINISH ticket  => %s\n", baseName)
 
-	log.Printf("mapSources => %s\n", base_name)
-	// map files and create user's directory
-	path_used_as_home, err := ctx.mapSources(base_name, ticket.Sources)
-	if err != nil {
-		return err
+	m := new(sync.Mutex)
+	errs := map[int]error{}
+
+	// exec
+	wg := new(sync.WaitGroup)
+	for index_, execSpec_ := range ticket.ExecSpecs {
+		wg.Add(1)
+		go func(index int, execSpec *ExecutionSpec) {
+			defer wg.Done()
+
+			baseNamePerSpec := fmt.Sprintf("%s-%d", baseName, index)
+			pathUsedAsHome, err := ctx.prepareUserHome(baseNamePerSpec, ticket.Sources)
+			if err != nil {
+				m.Lock()
+				defer m.Unlock()
+
+				errs[index] = err
+				return
+			}
+			log.Printf("basePath => %s\n", pathUsedAsHome)
+
+			// execute
+			if err := ctx.execSpec(pathUsedAsHome, index, execSpec, callback); err != nil {
+				m.Lock()
+				defer m.Unlock()
+
+				errs[index] = err
+				return
+			}
+		}(index_, execSpec_)
 	}
-	log.Printf("basePath => %s\n", path_used_as_home)
+	wg.Wait()
 
+	if len(errs) == 0 {
+		return nil
+	} else {
+		return fmt.Errorf("%v", errs)
+	}
+}
+
+func (ctx *Context) execSpec(
+	pathUsedAsHome string,
+	mainIndex int,
+	execSpec *ExecutionSpec,
+	callback invokeResultRecieverCallback,
+) error {
 	// build
-	if ticket.IsBuildRequired() {
-		if err := ctx.execBuild(path_used_as_home, ticket.BuildInst, callback); err != nil {
+	if execSpec.IsBuildRequired() {
+		if err := ctx.execBuild(pathUsedAsHome, mainIndex, execSpec.BuildInst, callback); err != nil {
 			if err == buildFailedError {
 				return nil // not an error
 			} else {
@@ -78,14 +109,8 @@ func (ctx *Context) ExecTicket(
 	}
 
 	// run
-	if errs := ctx.execManagedRun(path_used_as_home, ticket.RunInst, callback); errs != nil {
-		// TODO: process error
-		var s string
-		for err := range errs {
-			log.Printf("exec error %v\n", err)
-			s += fmt.Sprintf("%v: ", err)
-		}
-		return errors.New("Failed to exec inputs : " + s)
+	if err := ctx.execManagedRun(pathUsedAsHome, mainIndex, execSpec.RunInsts, callback); err != nil {
+		return err
 	}
 
 	return nil
@@ -94,18 +119,20 @@ func (ctx *Context) ExecTicket(
 // ========================================
 // ========================================
 func (ctx *Context) execBuild(
-	path_used_as_home string,
-	build_inst *BuildInstruction,
+	pathUsedAsHome string,
+	mainIndex int,
+	buildInst *BuildInstruction,
 	callback invokeResultRecieverCallback,
 ) error {
-	log.Printf("$$$$$$$$$$ START build => %s\n", path_used_as_home)
-	defer log.Printf("$$$$$$$$$$ FINISH build  => %s\n", path_used_as_home)
+	log.Printf("$$$$$$$$$$ START build => %s\n", pathUsedAsHome)
+	defer log.Printf("$$$$$$$$$$ FINISH build  => %s\n", pathUsedAsHome)
 
 	// compile phase
 	log.Printf("$$$$$$$$$$ START compile\n")
 	if err := ctx.invokeCompileCommand(
-		path_used_as_home,
-		build_inst.CompileSetting,
+		pathUsedAsHome,
+		mainIndex,
+		buildInst.CompileSetting,
 		callback,
 	); err != nil {
 		if err == compileFailedError {
@@ -116,10 +143,11 @@ func (ctx *Context) execBuild(
 	}
 
 	// link phase :: if link command is separated, so call linking commands
-	if build_inst.IsLinkIndependent() {
+	if buildInst.IsLinkIndependent() {
 		if err := ctx.invokeLinkCommand(
-			path_used_as_home,
-			build_inst.LinkSetting,
+			pathUsedAsHome,
+			mainIndex,
+			buildInst.LinkSetting,
 			callback,
 		); err != nil {
 			if err == linkFailedError {
@@ -134,50 +162,47 @@ func (ctx *Context) execBuild(
 }
 
 func (ctx *Context) execManagedRun(
-	path_used_as_home string,
-	run_inst *RunInstruction,
+	pathUsedAsHome string,
+	mainIndex int,
+	runInsts []*RunInstruction,
 	callback invokeResultRecieverCallback,
-) []error {
-	log.Printf("$$$$$$$$$$ START run => %s\n", path_used_as_home)
-	defer log.Printf("$$$$$$$$$$ FINISH run => %s\n", path_used_as_home)
+) error {
+	log.Printf("$$$$$$$$$$ START run => %s\n", pathUsedAsHome)
+	defer log.Printf("$$$$$$$$$$ FINISH run => %s\n", pathUsedAsHome)
 
-	//
-	wg := new(sync.WaitGroup)
 	m := new(sync.Mutex)
-	var errs []error = nil
+	errs := map[int]error{}
 
-	// execute inputs async
-	for _index, _input := range run_inst.Inputs {
+	wg := new(sync.WaitGroup)
+	for index_, runInst_ := range runInsts {
 		wg.Add(1)
-
-		go func(index int, input Input) {
+		go func(index int, runInst *RunInstruction) {
 			defer wg.Done()
 
-			if err := ctx.invokeRunCommand(
-				path_used_as_home,
-				index,
-				&input,
-				callback,
-			); err != nil {
+			if err := ctx.invokeRunCommand(pathUsedAsHome, mainIndex, index, runInst, callback); err != nil {
 				m.Lock()
-				if errs == nil {
-					errs = make([]error, 0)
-				}
-				errs = append(errs, err)
-				m.Unlock()
+				defer m.Unlock()
+
+				errs[index] = err
+				return
 			}
-		}(_index, _input)
+		}(index_, runInst_)
 	}
 	wg.Wait()
 
-	return errs
+	if len(errs) == 0 {
+		return nil
+	} else {
+		return fmt.Errorf("%v", errs)
+	}
 }
 
 // ========================================
 // ========================================
 func (ctx *Context) invokeCompileCommand(
-	path_used_as_home string,
-	exec_inst *ExecutionSetting,
+	pathUsedAsHome string,
+	mainIndex int,
+	settings *ExecutionSetting,
 	callback invokeResultRecieverCallback,
 ) error {
 	log.Println(">> called invokeCompileCommand")
@@ -185,37 +210,38 @@ func (ctx *Context) invokeCompileCommand(
 	opts := &SandboxExecutionOption{
 		Mounts: []MountOption{
 			MountOption{
-				HostPath:   path_used_as_home,
+				HostPath:   pathUsedAsHome,
 				GuestPath:  guestHome,
 				IsReadOnly: false,
 				DoChown:    true,
 			},
 			MountOption{
-				HostPath:   ctx.packageInstalledBasePath,
-				GuestPath:  ctx.packageInstalledBasePath,
+				HostPath:   ctx.sandboxExecutor.DefaultMountOption().HostPath,
+				GuestPath:  ctx.sandboxExecutor.DefaultMountOption().GuestPath,
 				IsReadOnly: true,
 				DoChown:    false,
 			},
 		},
 		GuestHomePath: guestHome,
 		Limits: &ResourceLimit{
-			Core:    0,                          // Process can NOT create CORE file
-			Nofile:  512,                        // Process can open 512 files
-			NProc:   30,                         // Process can create processes to 30
-			MemLock: 1024,                       // Process can lock 1024 Bytes by mlock(2)
-			CpuTime: exec_inst.CpuTimeLimit,     // sec
-			Memory:  exec_inst.MemoryBytesLimit, // bytes
-			FSize:   5 * 1024 * 1024,            // Process can writes a file only 5MiB
+			Core:    0,                         // Process can NOT create CORE file
+			Nofile:  512,                       // Process can open 512 files
+			NProc:   30,                        // Process can create processes to 30
+			MemLock: 1024,                      // Process can lock 1024 Bytes by mlock(2)
+			CpuTime: settings.CpuTimeLimit,     // sec
+			Memory:  settings.MemoryBytesLimit, // bytes
+			FSize:   5 * 1024 * 1024,           // Process can writes a file only 5MiB
 		},
-		Args: exec_inst.Args,
-		Envs: exec_inst.Envs,
+		Args: settings.Args,
+		Envs: settings.Envs,
 	}
 
 	f := func(output *StreamOutput) error {
 		return callback(&StreamOutputResult{
-			Mode:   CompileMode,
-			Index:  0,
-			Output: output,
+			Mode:      CompileMode,
+			MainIndex: mainIndex,
+			SubIndex:  0,
+			Output:    output,
 		})
 	}
 	result, err := ctx.sandboxExecutor.Execute(opts, nil, f)
@@ -225,9 +251,10 @@ func (ctx *Context) invokeCompileCommand(
 	}
 
 	callback(&StreamExecutedResult{
-		Mode:   CompileMode,
-		Index:  0,
-		Result: result,
+		Mode:      CompileMode,
+		MainIndex: mainIndex,
+		SubIndex:  0,
+		Result:    result,
 	})
 
 	if !result.IsSucceeded() {
@@ -238,8 +265,9 @@ func (ctx *Context) invokeCompileCommand(
 }
 
 func (ctx *Context) invokeLinkCommand(
-	path_used_as_home string,
-	exec_inst *ExecutionSetting,
+	pathUsedAsHome string,
+	mainIndex int,
+	settings *ExecutionSetting,
 	callback invokeResultRecieverCallback,
 ) error {
 	log.Println(">> called invokeLinkCommand")
@@ -247,14 +275,14 @@ func (ctx *Context) invokeLinkCommand(
 	opts := &SandboxExecutionOption{
 		Mounts: []MountOption{
 			MountOption{
-				HostPath:   path_used_as_home,
+				HostPath:   pathUsedAsHome,
 				GuestPath:  guestHome,
 				IsReadOnly: false,
 				DoChown:    true,
 			},
 			MountOption{
-				HostPath:   ctx.packageInstalledBasePath,
-				GuestPath:  ctx.packageInstalledBasePath,
+				HostPath:   ctx.sandboxExecutor.DefaultMountOption().HostPath,
+				GuestPath:  ctx.sandboxExecutor.DefaultMountOption().GuestPath,
 				IsReadOnly: true,
 				DoChown:    false,
 			},
@@ -269,15 +297,16 @@ func (ctx *Context) invokeLinkCommand(
 			Memory:  2 * 1024 * 1024 * 1024, // 2GiB[fixed]
 			FSize:   40 * 1024 * 1024,       // 40MiB[fixed]
 		},
-		Args: exec_inst.Args,
-		Envs: exec_inst.Envs,
+		Args: settings.Args,
+		Envs: settings.Envs,
 	}
 
 	f := func(output *StreamOutput) error {
 		return callback(&StreamOutputResult{
-			Mode:   LinkMode,
-			Index:  0,
-			Output: output,
+			Mode:      LinkMode,
+			MainIndex: mainIndex,
+			SubIndex:  0,
+			Output:    output,
 		})
 	}
 	result, err := ctx.sandboxExecutor.Execute(opts, nil, f)
@@ -287,9 +316,10 @@ func (ctx *Context) invokeLinkCommand(
 	}
 
 	callback(&StreamExecutedResult{
-		Mode:   LinkMode,
-		Index:  0,
-		Result: result,
+		Mode:      LinkMode,
+		MainIndex: mainIndex,
+		SubIndex:  0,
+		Result:    result,
 	})
 
 	if !result.IsSucceeded() {
@@ -300,15 +330,16 @@ func (ctx *Context) invokeLinkCommand(
 }
 
 func (ctx *Context) invokeRunCommand(
-	path_used_as_home string,
-	index int,
-	input *Input,
+	pathUsedAsHome string,
+	mainIndex int,
+	subIndex int,
+	runInst *RunInstruction,
 	callback invokeResultRecieverCallback,
 ) error {
 	log.Println(">> called invokeRunInputCommand")
 
-	stdin := input.Stdin
-	exec_inst := input.RunSetting
+	stdin := runInst.Stdin
+	settings := runInst.RunSetting
 
 	var temp_stdin *os.File = nil
 	if stdin != nil {
@@ -347,37 +378,38 @@ func (ctx *Context) invokeRunCommand(
 	opts := &SandboxExecutionOption{
 		Mounts: []MountOption{
 			MountOption{
-				HostPath:   ctx.packageInstalledBasePath,
-				GuestPath:  ctx.packageInstalledBasePath,
+				HostPath:   ctx.sandboxExecutor.DefaultMountOption().HostPath,
+				GuestPath:  ctx.sandboxExecutor.DefaultMountOption().GuestPath,
 				IsReadOnly: true,
 				DoChown:    false,
 			},
 		},
 		Copies: []CopyOption{ // NOTE: NOT "Mount", to run async
 			CopyOption{
-				HostPath:  path_used_as_home,
+				HostPath:  pathUsedAsHome,
 				GuestPath: guestHome,
 			},
 		},
 		GuestHomePath: guestHome,
 		Limits: &ResourceLimit{
-			Core:    0,                          // Process can NOT create CORE file
-			Nofile:  512,                        // Process can open 512 files
-			NProc:   30,                         // Process can create processes to 30
-			MemLock: 1024,                       // Process can lock 1024 Bytes by mlock(2)
-			CpuTime: exec_inst.CpuTimeLimit,     // sec
-			Memory:  exec_inst.MemoryBytesLimit, // bytes
-			FSize:   1 * 1024 * 1024,            // Process can writes a file only 1MB
+			Core:    0,                         // Process can NOT create CORE file
+			Nofile:  512,                       // Process can open 512 files
+			NProc:   30,                        // Process can create processes to 30
+			MemLock: 1024,                      // Process can lock 1024 Bytes by mlock(2)
+			CpuTime: settings.CpuTimeLimit,     // sec
+			Memory:  settings.MemoryBytesLimit, // bytes
+			FSize:   1 * 1024 * 1024,           // Process can writes a file only 1MB
 		},
-		Args: exec_inst.Args,
-		Envs: exec_inst.Envs,
+		Args: settings.Args,
+		Envs: settings.Envs,
 	}
 
 	f := func(output *StreamOutput) error {
 		return callback(&StreamOutputResult{
-			Mode:   RunMode,
-			Index:  index,
-			Output: output,
+			Mode:      RunMode,
+			MainIndex: mainIndex,
+			SubIndex:  subIndex,
+			Output:    output,
 		})
 	}
 	result, err := ctx.sandboxExecutor.Execute(opts, temp_stdin, f)
@@ -388,9 +420,10 @@ func (ctx *Context) invokeRunCommand(
 
 	log.Printf(">> %v", result)
 	callback(&StreamExecutedResult{
-		Mode:   RunMode,
-		Index:  index,
-		Result: result,
+		Mode:      RunMode,
+		MainIndex: mainIndex,
+		SubIndex:  subIndex,
+		Result:    result,
 	})
 	log.Println("sandboxExecutor.Exit >> %v", result)
 
@@ -399,24 +432,26 @@ func (ctx *Context) invokeRunCommand(
 
 // ========================================
 // ========================================
-func (ctx *Context) mapSources(
-	base_name string,
+func (ctx *Context) prepareUserHome(
+	baseName string,
 	sources []*SourceData,
 ) (string, error) {
 	// unpack source codes
-	source_contents, err := convertSourcesToContents(sources)
+	sourceContents, err := convertSourcesToContents(sources)
 	if err != nil {
 		return "", err
 	}
 
-	//
-	user_home_dir_path, err := ctx.createMultipleTargets(
-		base_name,
-		source_contents,
+	t := time.Now()
+	const timeLayout = "2006-01-02-15-04-05.000Z07:00"
+	baseNameTmp := fmt.Sprintf("%s_%x", baseName, t.Format(timeLayout))
+	userHomeDirPath, err := ctx.createMultipleTargets(
+		baseNameTmp,
+		sourceContents,
 	)
 	if err != nil {
-		return "", errors.New("couldn't create multi target : " + err.Error())
+		return "", fmt.Errorf("cannot create multi targets : %v", err.Error())
 	}
 
-	return user_home_dir_path, nil
+	return userHomeDirPath, nil
 }

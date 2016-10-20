@@ -48,27 +48,36 @@ type resultPair struct {
 
 type awahoSandboxExecutor struct {
 	ExecutablePath string
+	HostMountDir   string
+	GuestMountDir  string
+}
+
+func normalizePath(baseDir string, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	} else {
+		return filepath.Join(path, path)
+	}
 }
 
 func MakeAwahoSandboxExecutor(
+	baseDir string,
 	executablePath string,
+	hostMountDir string,
+	guestMountDir string,
 ) (*awahoSandboxExecutor, error) {
-	cwd, err := os.Getwd()
-	if err != nil {
-		return nil, err
-	}
-
-	path := func() string {
-		if filepath.IsAbs(executablePath) {
-			return executablePath
-		} else {
-			return filepath.Join(cwd, executablePath)
-		}
-	}()
-
 	return &awahoSandboxExecutor{
-		ExecutablePath: path,
+		ExecutablePath: normalizePath(baseDir, executablePath),
+		HostMountDir:   normalizePath(baseDir, hostMountDir),
+		GuestMountDir:  normalizePath(baseDir, guestMountDir),
 	}, nil
+}
+
+func (exec *awahoSandboxExecutor) DefaultMountOption() *MountOption {
+	return &MountOption{
+		HostPath:  exec.HostMountDir,
+		GuestPath: exec.GuestMountDir,
+	}
 }
 
 func (exec *awahoSandboxExecutor) Execute(
@@ -322,9 +331,9 @@ func readPipeOutputAsync(
 
 		for {
 			pipe.m.Lock()
-			log.Printf("====> PIPE")
+			// log.Printf("====> PIPE")
 			size, err := pipe.r.Read(buffer)
-			log.Printf("<==== PIPE : size=%v err=%v", size, err)
+			// log.Printf("<==== PIPE : size=%v err=%v", size, err)
 			pipe.m.Unlock()
 			if err != nil {
 				if err == io.EOF {
