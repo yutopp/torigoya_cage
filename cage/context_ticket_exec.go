@@ -443,8 +443,8 @@ func (ctx *Context) prepareUserHome(
 	}
 
 	t := time.Now()
-	const timeLayout = "2006-01-02-15-04-05.000Z07:00"
-	baseNameTmp := fmt.Sprintf("%s_%x", baseName, t.Format(timeLayout))
+	const timeLayout = "2006-01-02-15-04-05.000"
+	baseNameTmp := fmt.Sprintf("%s_%s", baseName, t.Format(timeLayout))
 	userHomeDirPath, err := ctx.createMultipleTargets(
 		baseNameTmp,
 		sourceContents,

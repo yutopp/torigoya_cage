@@ -11,10 +11,13 @@ package torigoya
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
-	_ "strconv"
-	_ "sync"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
 	"testing"
 )
 
@@ -74,12 +77,6 @@ func TestCreateTargetRepeat(t *testing.T) {
 		}
 	}
 }
-
-
-
-
-
-
 
 func TestCreateInput(t *testing.T) {
 	gopath := os.Getenv("GOPATH")
@@ -213,7 +210,7 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
 			Args: []string{"/usr/bin/gcc", "prog.c", "-c", "-o", "prog.o"},
 			Envs: []string{
@@ -233,7 +230,7 @@ int main() {
 	}
 
 	//
-	run_insts := []*RunInstruction{
+	runInsts := []*RunInstruction{
 		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
@@ -258,10 +255,10 @@ int main() {
 		},
 	}
 
-	exec_specs := []*ExecutionSpec{
+	execSpecs := []*ExecutionSpec{
 		&ExecutionSpec{
-			BuildInst: build_inst,
-			RunInsts:  run_insts,
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
 		},
 	}
 
@@ -269,7 +266,7 @@ int main() {
 	ticket := &Ticket{
 		BaseName:  "TestTicketBasicUnit",
 		Sources:   sources,
-		ExecSpecs: exec_specs,
+		ExecSpecs: execSpecs,
 	}
 
 	// execute
@@ -320,7 +317,6 @@ int main() {
 	assertTestResult(t, &result, &expectedResult)
 }
 
-/*
 func TestTicketMultiSource(t *testing.T) {
 	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
@@ -376,63 +372,72 @@ int main() {
 	}
 
 	//
-	runInst := &RunInstruction{
-		Stdin: nil,
-		RunSetting: &ExecutionSetting{
-			Args:             []string{"./prog.out"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+	runInsts := []*RunInstruction{
+		&RunInstruction{
+			Stdin: nil,
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+			},
 		},
 	}
 
+	execSpecs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
+		},
+	}
 	//
 	ticket := &Ticket{
-		BaseName:  "",
+		BaseName:  "TestTicketMultiSource",
 		Sources:   sources,
-		ExecSpecs: []*ExecutionSpec{
-			makeExecSpec(buildInst, []*RunInstruction{runInst}),
-		},
+		ExecSpecs: execSpecs,
 	}
 
 	// execute
-	var result test_result
+	var result testResult
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
 		return
 	}
 
-	t.Logf("%V", result)
-
 	//
-	expect_result := testExpectResult{
-		compile: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		link: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		run: testExpectResultUnit{
-			out: []byte("foo\n"),
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						out: []byte("foo\n"),
+						status: &testExpectedStatus{
+							exited:     BoolOpt(true),
+							exitStatus: IntOpt(0),
+						},
+					},
+				},
 			},
 		},
 	}
 
 	//
-	assertTestResult(t, &result, &expect_result)
+	assertTestResult(t, &result, &expectedResult)
 }
-*/
-/*
+
 func TestTicketPS(t *testing.T) {
 	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
@@ -456,11 +461,11 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs: []string{},
-			CpuTimeLimit: 10,
+			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
+			Envs:             []string{},
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
@@ -468,37 +473,40 @@ int main() {
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
-			CpuTimeLimit: 10,
+			CpuTimeLimit:     10,
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 	}
 
 	//
-	run_inst := &RunInstruction{
-		Inputs: []Input{
-			Input{
-				Stdin: nil,
-				RunSetting: &ExecutionSetting{
-					Args: []string{"./prog.out"},
-					Envs: []string{},
-					CpuTimeLimit: 10,
-					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-				},
+	runInsts := []*RunInstruction{
+		&RunInstruction{
+			Stdin: nil,
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 			},
+		},
+	}
+
+	execSpecs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
 		},
 	}
 
 	//
 	ticket := &Ticket{
-		BaseName: "",
-		Sources: sources,
-		BuildInst: build_inst,
-		RunInst: run_inst,
+		BaseName:  "TestTicketPS",
+		Sources:   sources,
+		ExecSpecs: execSpecs,
 	}
 
 	// execute
-	var result test_result
-	result.run = make(map[int]*test_result_unit)
+	var result testResult
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
@@ -506,35 +514,57 @@ int main() {
 	}
 
 	//
-	expect_result := testExpectResult{
-		compile: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited: BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		link: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited: BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		run: map[int]*testExpectResultUnit{
-			0: &testExpectResultUnit{
-				out: []byte("hello!\ninput is 0\n"),
-				status: &testExpectStatus{
-					exited: BoolOpt(true),
-					exitStatus: IntOpt(0),
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						outFunc: func(buf []byte) error {
+							// Example
+							// USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND
+							// root         1  0.0  0.0  13308   180 ?        Sl+  10:37   0:00 d=(^o^)=b
+							// _70sy9y+     2  0.0  0.0  13088  1592 ?        S+   10:37   0:00 ./prog.out
+							// _70sy9y+     4  0.0  0.0  32852  2776 ?        R+   10:37   0:00 ps aux
+							lines := strings.Split(string(buf), "\n")
+
+							const line1Expected = "^root(\\s+)1"
+							if !regexp.MustCompile(line1Expected).MatchString(lines[1]) {
+								return fmt.Errorf("`%s` does not contain `%s`", lines[1], line1Expected)
+							}
+
+							const line2Expected = "^([_0-9a-z]+\\+)(\\s+)2"
+							if !regexp.MustCompile(line2Expected).MatchString(lines[2]) {
+								return fmt.Errorf("`%s` does not contain `%s`", lines[2], line2Expected)
+							}
+
+							return nil
+						},
+						status: &testExpectedStatus{
+							exited:     BoolOpt(true),
+							exitStatus: IntOpt(0),
+						},
+					},
 				},
 			},
 		},
 	}
 
 	//
-	assertTestResult(t, &result, &expect_result)
+	assertTestResult(t, &result, &expectedResult)
 }
-*/
-/*
+
 func TestTicketSignal(t *testing.T) {
 	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
@@ -568,7 +598,7 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
 			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
 			Envs:             []string{},
@@ -586,8 +616,8 @@ int main() {
 	}
 
 	//
-	run_inst := &RunInstruction{
-		Input: Input{
+	runInsts := []*RunInstruction{
+		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
 				Args:             []string{"./prog.out"},
@@ -598,50 +628,60 @@ int main() {
 		},
 	}
 
+	execSpecs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
+		},
+	}
+
 	//
 	ticket := &Ticket{
-		BaseName:  "",
+		BaseName:  "TestTicketSignal",
 		Sources:   sources,
-		BuildInst: build_inst,
-		RunInst:   run_inst,
+		ExecSpecs: execSpecs,
 	}
 
 	// execute
-	var result test_result
+	var result testResult
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
 		return
 	}
 
-	t.Logf("%V", result)
-
 	//
-	expect_result := testExpectResult{
-		compile: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		link: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		run: testExpectResultUnit{
-			out: []byte("hello!\n"),
-			status: &testExpectStatus{
-				exited:   BoolOpt(false),
-				signaled: BoolOpt(true),
-				signal:   IntOpt(9),
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						out: []byte("hello!\n"),
+						status: &testExpectedStatus{
+							exited:   BoolOpt(false),
+							signaled: BoolOpt(true),
+							signal:   IntOpt(9),
+						},
+					},
+				},
 			},
 		},
 	}
 
 	//
-	assertTestResult(t, &result, &expect_result)
+	assertTestResult(t, &result, &expectedResult)
 }
 
 func TestTicketBasicParallel1(t *testing.T) {
@@ -670,7 +710,7 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
 			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
 			Envs:             []string{},
@@ -688,8 +728,8 @@ int main() {
 	}
 
 	//
-	run_inst := &RunInstruction{
-		Input: Input{
+	runInsts := []*RunInstruction{
+		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
 				Args:             []string{"./prog.out"},
@@ -698,58 +738,68 @@ int main() {
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 			},
 		},
+		&RunInstruction{
+			Stdin: &SourceData{
+				"hoge.in",
+				[]byte("100"),
+				false,
+			},
+			RunSetting: &ExecutionSetting{
+				Args:             []string{"./prog.out"},
+				Envs:             []string{},
+				CpuTimeLimit:     10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+			},
+		},
+	}
 
-		// 			Input{
-		// 				Stdin: &SourceData{
-		// 					"hoge.in",
-		// 					[]byte("100"),
-		// 					false,
-		// 				},
-		// 				RunSetting: &ExecutionSetting{
-		// 					Args:             []string{"./prog.out"},
-		// 					Envs:             []string{},
-		// 					CpuTimeLimit:     10,
-		// 					MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		// 				},
-		// 			},
-		// 		},
+	execSpecs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
+		},
 	}
 
 	//
 	ticket := &Ticket{
-		BaseName:  "",
+		BaseName:  "TestTicketBasicParallel1",
 		Sources:   sources,
-		BuildInst: build_inst,
-		RunInst:   run_inst,
+		ExecSpecs: execSpecs,
 	}
 
 	//
-	expect_result := testExpectResult{
-		compile: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						out: []byte("hello!\ninput is 0\n"),
+						status: &testExpectedStatus{
+							exited:     BoolOpt(true),
+							exitStatus: IntOpt(0),
+						},
+					},
+					testExpectedUnitResult{
+						out: []byte("hello!\ninput is 100\n"),
+						status: &testExpectedStatus{
+							exited:     BoolOpt(true),
+							exitStatus: IntOpt(0),
+						},
+					},
+				},
 			},
-		},
-		link: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		run: testExpectResultUnit{
-			out: []byte("hello!\ninput is 0\n"),
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-			// 			1: &testExpectResultUnit{
-			// 				out: []byte("hello!\ninput is 100\n"),
-			// 				status: &testExpectStatus{
-			// 					exited:     BoolOpt(true),
-			// 					exitStatus: IntOpt(0),
-			// 				},
-			// 			},
 		},
 	}
 
@@ -763,22 +813,23 @@ int main() {
 
 		go func(no int) {
 			defer func() {
-				fmt.Printf("Done! %d\n", no)
-
-				fmt.Printf("fs! %v\n", fx)
+				t.Logf("Done! %d", no)
+				t.Logf("fs! %v", fx)
 				wg.Done()
 			}()
 
+			ticketTmp := *ticket
+			ticketTmp.BaseName = ticketTmp.BaseName + "-" + strconv.Itoa(no)
+
 			// execute
-			var result test_result
+			var result testResult
 			f := makeHelperCallback(&result)
-			if err := ctx.ExecTicket(ticket, f); err != nil {
+			if err := ctx.ExecTicket(&ticketTmp, f); err != nil {
 				t.Errorf(err.Error())
 				return
 			}
 
-			t.Logf("%V", result)
-			assertTestResult(t, &result, &expect_result)
+			assertTestResult(t, &result, &expectedResult)
 
 			m.Lock()
 			fx[no] = true // succeeded
@@ -815,7 +866,7 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
 			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
 			Envs:             []string{},
@@ -842,15 +893,14 @@ int main() {
 
 		go func(no int) {
 			defer func() {
-				fmt.Printf("Done! %d\n", no)
-
-				fmt.Printf("fs! %v\n", fx)
+				t.Logf("Done! %d", no)
+				t.Logf("fs! %v", fx)
 				wg.Done()
 			}()
 
 			//
-			run_inst := &RunInstruction{
-				Input: Input{
+			runInsts := []*RunInstruction{
+				&RunInstruction{
 					Stdin: &SourceData{
 						Data: []byte(strconv.Itoa(no)),
 					},
@@ -863,47 +913,58 @@ int main() {
 				},
 			}
 
-			//
-			ticket := &Ticket{
-				BaseName:  "",
-				Sources:   sources,
-				BuildInst: build_inst,
-				RunInst:   run_inst,
+			execSpecs := []*ExecutionSpec{
+				&ExecutionSpec{
+					BuildInst: buildInst,
+					RunInsts:  runInsts,
+				},
 			}
 
 			//
-			expect_result := testExpectResult{
-				compile: testExpectResultUnit{
-					status: &testExpectStatus{
-						exited:     BoolOpt(true),
-						exitStatus: IntOpt(0),
-					},
-				},
-				link: testExpectResultUnit{
-					status: &testExpectStatus{
-						exited:     BoolOpt(true),
-						exitStatus: IntOpt(0),
-					},
-				},
-				run: testExpectResultUnit{
-					out: []byte(fmt.Sprintf("hello!\ninput is %d\n", no)),
-					status: &testExpectStatus{
-						exited:     BoolOpt(true),
-						exitStatus: IntOpt(0),
+			ticket := &Ticket{
+				BaseName:  "TestTicketBasicParallel2-" + strconv.Itoa(no),
+				Sources:   sources,
+				ExecSpecs: execSpecs,
+			}
+
+			//
+			expectedResult := testExpectedResult{
+				execResults: []testExpectedExecResult{
+					testExpectedExecResult{
+						compile: testExpectedUnitResult{
+							status: &testExpectedStatus{
+								exited:     BoolOpt(true),
+								exitStatus: IntOpt(0),
+							},
+						},
+						link: testExpectedUnitResult{
+							status: &testExpectedStatus{
+								exited:     BoolOpt(true),
+								exitStatus: IntOpt(0),
+							},
+						},
+						run: []testExpectedUnitResult{
+							testExpectedUnitResult{
+								out: []byte(fmt.Sprintf("hello!\ninput is %d\n", no)),
+								status: &testExpectedStatus{
+									exited:     BoolOpt(true),
+									exitStatus: IntOpt(0),
+								},
+							},
+						},
 					},
 				},
 			}
 
 			// execute
-			var result test_result
+			var result testResult
 			f := makeHelperCallback(&result)
 			if err := ctx.ExecTicket(ticket, f); err != nil {
 				t.Errorf(err.Error())
 				return
 			}
 
-			t.Logf("%V", result)
-			assertTestResult(t, &result, &expect_result)
+			assertTestResult(t, &result, &expectedResult)
 
 			m.Lock()
 			fx[no] = true // succeeded
@@ -937,7 +998,7 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
 			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
 			Envs:             []string{},
@@ -955,8 +1016,8 @@ int main() {
 	}
 
 	//
-	run_inst := &RunInstruction{
-		Input: Input{
+	runInsts := []*RunInstruction{
+		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
 				Args:             []string{"./prog.out"},
@@ -967,47 +1028,57 @@ int main() {
 		},
 	}
 
+	execSpecs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
+		},
+	}
+
 	//
 	ticket := &Ticket{
-		BaseName:  "",
+		BaseName:  "TestTicketTLE",
 		Sources:   sources,
-		BuildInst: build_inst,
-		RunInst:   run_inst,
+		ExecSpecs: execSpecs,
 	}
 
 	// execute
-	var result test_result
+	var result testResult
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
 		return
 	}
 
-	t.Logf("%V", result)
-
 	//
-	expect_result := testExpectResult{
-		compile: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		link: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		run: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited: BoolOpt(false), // killed
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						status: &testExpectedStatus{
+							exited: BoolOpt(false), // killed
+						},
+					},
+				},
 			},
 		},
 	}
 
 	//
-	assertTestResult(t, &result, &expect_result)
+	assertTestResult(t, &result, &expectedResult)
 }
 
 func TestTicketSleepTLE(t *testing.T) {
@@ -1033,7 +1104,7 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
 			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
 			Envs:             []string{},
@@ -1051,8 +1122,8 @@ int main() {
 	}
 
 	//
-	run_inst := &RunInstruction{
-		Input: Input{
+	runInsts := []*RunInstruction{
+		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
 				Args:             []string{"./prog.out"},
@@ -1063,16 +1134,22 @@ int main() {
 		},
 	}
 
+	execSpecs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
+		},
+	}
+
 	//
 	ticket := &Ticket{
-		BaseName:  "",
+		BaseName:  "TestTicketSleepTLE",
 		Sources:   sources,
-		BuildInst: build_inst,
-		RunInst:   run_inst,
+		ExecSpecs: execSpecs,
 	}
 
 	// execute
-	var result test_result
+	var result testResult
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
@@ -1082,28 +1159,34 @@ int main() {
 	t.Logf("%V", result)
 
 	//
-	expect_result := testExpectResult{
-		compile: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		link: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		run: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited: BoolOpt(false), // killed
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						status: &testExpectedStatus{
+							exited: BoolOpt(false), // killed
+						},
+					},
+				},
 			},
 		},
 	}
 
 	//
-	assertTestResult(t, &result, &expect_result)
+	assertTestResult(t, &result, &expectedResult)
 }
 
 func TestTicketMLE(t *testing.T) {
@@ -1134,7 +1217,7 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
 			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
 			Envs:             []string{},
@@ -1152,9 +1235,8 @@ int main() {
 	}
 
 	//
-	run_inst := &RunInstruction{
-		Input: Input{
-
+	runInsts := []*RunInstruction{
+		&RunInstruction{
 			Stdin: &SourceData{
 				Data: []byte("300000000"), // 300MB
 			},
@@ -1167,47 +1249,57 @@ int main() {
 		},
 	}
 
+	execSpecs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
+		},
+	}
+
 	//
 	ticket := &Ticket{
-		BaseName:  "",
+		BaseName:  "TestTicketMLE",
 		Sources:   sources,
-		BuildInst: build_inst,
-		RunInst:   run_inst,
+		ExecSpecs: execSpecs,
 	}
 
 	// execute
-	var result test_result
+	var result testResult
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
 		return
 	}
 
-	t.Logf("%V", result)
-
 	//
-	expect_result := testExpectResult{
-		compile: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		link: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		run: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited: BoolOpt(false), // killed
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						status: &testExpectedStatus{
+							exited: BoolOpt(false), // killed
+						},
+					},
+				},
 			},
 		},
 	}
 
 	//
-	assertTestResult(t, &result, &expect_result)
+	assertTestResult(t, &result, &expectedResult)
 }
 
 func TestTicketRepeat(t *testing.T) {
@@ -1235,7 +1327,7 @@ int main() {
 	}
 
 	//
-	build_inst := &BuildInstruction{
+	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
 			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
 			Envs:             []string{},
@@ -1253,9 +1345,8 @@ int main() {
 	}
 
 	//
-	run_inst := &RunInstruction{
-		Input: Input{
-
+	runInsts := []*RunInstruction{
+		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
 				Args:             []string{"./prog.out"},
@@ -1266,54 +1357,66 @@ int main() {
 		},
 	}
 
+	execSpecs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
+		},
+	}
+
 	//
 	ticket := &Ticket{
-		BaseName:  "",
+		BaseName:  "TestTicketRepeat",
 		Sources:   sources,
-		BuildInst: build_inst,
-		RunInst:   run_inst,
+		ExecSpecs: execSpecs,
 	}
 
 	// execute
-	var result test_result
+	var result testResult
 	f := makeHelperCallback(&result)
 	if err := ctx.ExecTicket(ticket, f); err != nil {
 		t.Errorf(err.Error())
 		return
 	}
 
-	expect_out := []byte{}
+	expectedOut := []byte{}
 	for i := 0; i < 100000; i++ {
-		expect_out = append(expect_out, fmt.Sprintf("%d\n", i)...)
+		expectedOut = append(expectedOut, fmt.Sprintf("%d\n", i)...)
 	}
 
 	//
-	expect_result := testExpectResult{
-		compile: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		link: testExpectResultUnit{
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
-			},
-		},
-		run: testExpectResultUnit{
-			out: expect_out,
-			status: &testExpectStatus{
-				exited:     BoolOpt(true),
-				exitStatus: IntOpt(0),
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						out: expectedOut,
+						status: &testExpectedStatus{
+							exited:     BoolOpt(true),
+							exitStatus: IntOpt(0),
+						},
+					},
+				},
 			},
 		},
 	}
 
 	//
-	assertTestResult(t, &result, &expect_result)
+	assertTestResult(t, &result, &expectedResult)
 }
-*/
+
 // ==================================================
 // ==================================================
 //
@@ -1402,7 +1505,13 @@ func assertTestResult(t *testing.T, result *testResult, expect *testExpectedResu
 			}
 
 		} else {
-			t.Logf("[SKIPPED: %s / out]", tag)
+			if expect.outFunc != nil {
+				if err := expect.outFunc(result.out); err != nil {
+					t.Fatalf("[ERROR  : %s / out] validate failed : %v", tag, err)
+				}
+			} else {
+				t.Logf("[SKIPPED: %s / out]", tag)
+			}
 		}
 
 		if expect.err != nil {
@@ -1414,7 +1523,13 @@ func assertTestResult(t *testing.T, result *testResult, expect *testExpectedResu
 			}
 
 		} else {
-			t.Logf("[SKIPPED: %s / err]", tag)
+			if expect.errFunc != nil {
+				if err := expect.errFunc(result.err); err != nil {
+					t.Fatalf("[ERROR  : %s / err] validate failed : %v", tag, err)
+				}
+			} else {
+				t.Logf("[SKIPPED: %s / err]", tag)
+			}
 		}
 	}
 
@@ -1447,27 +1562,6 @@ func assertTestResult(t *testing.T, result *testResult, expect *testExpectedResu
 			assertUnit("compile", execRunResult, &execRunExpected)
 		}
 	}
-
-	// 	assertUnit("compile", &result.compile, &expect.compile)
-	// 	assertUnit("link   ", &result.link, &expect.link)
-	// 	assertUnit("run    ", &result.run, &expect.run)
-	//
-	// 	// run
-	// 	checked := make(map[int]bool)
-	// 	for key, result_unit := range result.run {
-	// 		expect_unit, ok := expect.run[key]
-	// 		if !ok {
-	// 			t.Fatalf("Unexpected key(%d)", key)
-	// 		}
-	// 		assertUnit(fmt.Sprintf("run:%d", key), result_unit, expect_unit)
-	// 		checked[key] = true
-	// 	}
-	//
-	// 	for key, _ := range expect.run {
-	// 		if _, ok := checked[key]; !ok {
-	// 			t.Fatalf("The key(%d) was not checked", key)
-	// 		}
-	// 	}
 }
 
 func makeExecSpec(buildInst *BuildInstruction, runInsts []*RunInstruction) *ExecutionSpec {
@@ -1485,8 +1579,9 @@ type testExpectedStatus struct {
 	signal     IntOptionalType
 }
 type testExpectedUnitResult struct {
-	out, err []byte
-	status   *testExpectedStatus
+	out, err         []byte
+	outFunc, errFunc func(buf []byte) error
+	status           *testExpectedStatus
 }
 type testExpectedExecResult struct {
 	compile, link testExpectedUnitResult
