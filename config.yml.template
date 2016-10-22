@@ -7,6 +7,7 @@ release:
     host_mount_dir: "/usr/local/procgarden"
     guest_mount_dir: "/usr/local/procgarden"
   is_debug_mode: false
+  exec_dir: "/tmp/cage_exec"
 
 debug:
   host: "127.0.0.1"
@@ -17,3 +18,4 @@ debug:
     host_mount_dir: "./_env_test"
     guest_mount_dir: "/usr/local/procgarden"
   is_debug_mode: true
+  exec_dir: "/tmp/cage_exec"

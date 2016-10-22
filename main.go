@@ -38,18 +38,12 @@ type Config map[string]*struct {
 	Port            int            `yaml:"port"`
 	SandboxExecutor *sandboxConfig `yaml:"sandbox"`
 	IsDebugMode     bool           `yaml:"is_debug_mode"`
+	ExecDir         string         `yaml:"exec_dir"`
 }
 
 //
 func main() {
-	cwd, err := os.Getwd()
-	if err != nil {
-		log.Panicf("Failed to get cwd: %v\n", err)
-	}
-
-	//
 	config_path := flag.String("config", "config.yml", "path to config.yml")
-	exec_dir := flag.String("exec_dir", cwd, "path to config.yml")
 	mode := flag.String("mode", "release", "select mode from config")
 	flag.Parse()
 
@@ -104,17 +98,24 @@ func main() {
 		)
 	}
 
+	//
+	if target_config.ExecDir == "" {
+		log.Panicf("ExecDir is empty", target_config.ExecDir)
+	}
+	execDir := torigoya.NormalizePath(config_dir, target_config.ExecDir)
+
 	// show
 	log.Printf("==== Config ====")
 	log.Printf("Mode    :  %s", *mode)
 	log.Printf("Host    :  %s", target_config.Host)
 	log.Printf("Port    :  %d", target_config.Port)
 	log.Printf("Sandbox :  %s", target_config.SandboxExecutor)
+	log.Printf("ExecDir :  %s", execDir)
 
 	// make context!
 	ctx_opt := &torigoya.ContextOptions{
-		BasePath:          *exec_dir,
-		UserFilesBasePath: "/tmp/cage_recieved_files",
+		BasePath:          execDir,
+		UserFilesBasePath: "/tmp/cage_received_files",
 		SandboxExec:       sandbox,
 	}
 	ctx, err := torigoya.InitContext(ctx_opt)

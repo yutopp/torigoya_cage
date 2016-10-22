@@ -17,7 +17,6 @@ import (
 	"io"
 	"log"
 	"os"
-	"path/filepath"
 	"strconv"
 	"sync"
 	"time"
@@ -52,14 +51,6 @@ type awahoSandboxExecutor struct {
 	GuestMountDir  string
 }
 
-func normalizePath(baseDir string, path string) string {
-	if filepath.IsAbs(path) {
-		return path
-	} else {
-		return filepath.Join(path, path)
-	}
-}
-
 func MakeAwahoSandboxExecutor(
 	baseDir string,
 	executablePath string,
@@ -67,9 +58,9 @@ func MakeAwahoSandboxExecutor(
 	guestMountDir string,
 ) (*awahoSandboxExecutor, error) {
 	return &awahoSandboxExecutor{
-		ExecutablePath: normalizePath(baseDir, executablePath),
-		HostMountDir:   normalizePath(baseDir, hostMountDir),
-		GuestMountDir:  normalizePath(baseDir, guestMountDir),
+		ExecutablePath: NormalizePath(baseDir, executablePath),
+		HostMountDir:   NormalizePath(baseDir, hostMountDir),
+		GuestMountDir:  NormalizePath(baseDir, guestMountDir),
 	}, nil
 }
 

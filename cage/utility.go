@@ -12,7 +12,16 @@ package torigoya
 
 import (
 	"os"
+	"path/filepath"
 )
+
+func NormalizePath(baseDir string, path string) string {
+	if filepath.IsAbs(path) {
+		return path
+	} else {
+		return filepath.Join(path, path)
+	}
+}
 
 func expectRoot() {
 	if os.Geteuid() != 0 {
