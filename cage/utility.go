@@ -19,7 +19,7 @@ func NormalizePath(baseDir string, path string) string {
 	if filepath.IsAbs(path) {
 		return path
 	} else {
-		return filepath.Join(path, path)
+		return filepath.Join(baseDir, path)
 	}
 }
 
