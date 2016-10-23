@@ -60,7 +60,7 @@ func convertSourcesToContents(
 
 // ========================================
 type ExecutionSetting struct {
-	Args             []string `codec:"args"`
+	Command          string   `codec:"command"`
 	Envs             []string `codec:"envs"`
 	CpuTimeLimit     uint64   `codec:"cpu_time_limit"`
 	MemoryBytesLimit uint64   `codec:"memory_bytes_limit"`

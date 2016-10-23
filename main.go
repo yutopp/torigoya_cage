@@ -106,11 +106,12 @@ func main() {
 
 	// show
 	log.Printf("==== Config ====")
-	log.Printf("Mode    :  %s", *mode)
-	log.Printf("Host    :  %s", target_config.Host)
-	log.Printf("Port    :  %d", target_config.Port)
-	log.Printf("Sandbox :  %s", target_config.SandboxExecutor)
-	log.Printf("ExecDir :  %s", execDir)
+	log.Printf("ConfigDir :  %s", config_dir)
+	log.Printf("Mode      :  %s", *mode)
+	log.Printf("Host      :  %s", target_config.Host)
+	log.Printf("Port      :  %d", target_config.Port)
+	log.Printf("Sandbox   :  %s", target_config.SandboxExecutor)
+	log.Printf("ExecDir   :  %s", execDir)
 
 	// make context!
 	ctx_opt := &torigoya.ContextOptions{

@@ -123,7 +123,7 @@ func (exec *awahoSandboxExecutor) Execute(
 	args = append(args, exec.makeCopyOptions(opts)...)
 	args = append(args, exec.makeEnvOptions(opts)...)
 	args = append(args, "--")
-	args = append(args, opts.Args...)
+	args = append(args, "/bin/sh", "-c", opts.Command)
 
 	attr := os.ProcAttr{
 		Files: []*os.File{

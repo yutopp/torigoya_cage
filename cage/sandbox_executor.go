@@ -39,7 +39,7 @@ type SandboxExecutionOption struct {
 	Copies        []CopyOption
 	GuestHomePath string
 	Limits        *ResourceLimit
-	Args          []string
+	Command       string
 	Envs          []string
 }
 

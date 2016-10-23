@@ -232,7 +232,7 @@ func (ctx *Context) invokeCompileCommand(
 			Memory:  settings.MemoryBytesLimit, // bytes
 			FSize:   5 * 1024 * 1024,           // Process can writes a file only 5MiB
 		},
-		Args: settings.Args,
+		Command: settings.Command,
 		Envs: settings.Envs,
 	}
 
@@ -297,7 +297,7 @@ func (ctx *Context) invokeLinkCommand(
 			Memory:  2 * 1024 * 1024 * 1024, // 2GiB[fixed]
 			FSize:   40 * 1024 * 1024,       // 40MiB[fixed]
 		},
-		Args: settings.Args,
+		Command: settings.Command,
 		Envs: settings.Envs,
 	}
 
@@ -400,7 +400,7 @@ func (ctx *Context) invokeRunCommand(
 			Memory:  settings.MemoryBytesLimit, // bytes
 			FSize:   1 * 1024 * 1024,           // Process can writes a file only 1MB
 		},
-		Args: settings.Args,
+		Command: settings.Command,
 		Envs: settings.Envs,
 	}
 

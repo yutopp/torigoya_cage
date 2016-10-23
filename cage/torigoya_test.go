@@ -212,7 +212,7 @@ int main() {
 	//
 	buildInst := &BuildInstruction{
 		CompileSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/gcc", "prog.c", "-c", "-o", "prog.o"},
+			Command: "/usr/bin/gcc prog.c -c -o prog.o",
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
@@ -220,7 +220,7 @@ int main() {
 			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
 		},
 		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/gcc", "prog.o", "-o", "prog.out"},
+			Command: "/usr/bin/gcc prog.o -o prog.out",
 			Envs: []string{
 				"PATH=/usr/bin",
 			},
@@ -234,7 +234,7 @@ int main() {
 		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     10,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -247,7 +247,7 @@ int main() {
 				false,
 			},
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     10,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -354,29 +354,14 @@ int main() {
 	}
 
 	//
-	buildInst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
-			Envs: []string{
-				"PATH=/usr/bin",
-			},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
+	buildInst := makeCppBuildPreset()
 
 	//
 	runInsts := []*RunInstruction{
 		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     10,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -461,29 +446,14 @@ int main() {
 	}
 
 	//
-	buildInst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
-			Envs: []string{
-				"PATH=/usr/bin",
-			},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
+	buildInst := makeCppBuildPreset()
 
 	//
 	runInsts := []*RunInstruction{
 		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     10,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -598,29 +568,14 @@ int main() {
 	}
 
 	//
-	buildInst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
-			Envs: []string{
-				"PATH=/usr/bin",
-			},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
+	buildInst := makeCppBuildPreset()
 
 	//
 	runInsts := []*RunInstruction{
 		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     10,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -684,6 +639,113 @@ int main() {
 	assertTestResult(t, &result, &expectedResult)
 }
 
+func TestTicketFreeArgs(t *testing.T) {
+	ctx, err := InitContext(makeDefaultCtxOpt())
+	if err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	sources := []*SourceData{
+		&SourceData{
+			"prog.cpp",
+			[]byte(`
+#include <iostream>
+
+int main(int argc, char* argv[]) {
+    for(int i=1; i<argc; ++i) {
+        std::cout << argv[i] << " ";
+    }
+	std::cout << std::endl;
+}
+`),
+			false,
+		},
+	}
+
+	//
+	buildInst := makeCppBuildPreset()
+
+	//
+	runInsts := []*RunInstruction{
+		&RunInstruction{
+			Stdin: nil,
+			RunSetting: &ExecutionSetting{
+				Command:          "./prog.out $(id) $(sudo id) $(ls)",
+				Envs:             []string{},
+				CpuTimeLimit:     10,
+				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+			},
+		},
+	}
+
+	execSpecs := []*ExecutionSpec{
+		&ExecutionSpec{
+			BuildInst: buildInst,
+			RunInsts:  runInsts,
+		},
+	}
+
+	//
+	ticket := &Ticket{
+		BaseName:  "TestTicketFreeArgs",
+		Sources:   sources,
+		ExecSpecs: execSpecs,
+	}
+
+	// execute
+	var result testResult
+	f := makeHelperCallback(&result)
+	if err := ctx.ExecTicket(ticket, f); err != nil {
+		t.Errorf(err.Error())
+		return
+	}
+
+	//
+	expectedResult := testExpectedResult{
+		execResults: []testExpectedExecResult{
+			testExpectedExecResult{
+				compile: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				link: testExpectedUnitResult{
+					status: &testExpectedStatus{
+						exited:     BoolOpt(true),
+						exitStatus: IntOpt(0),
+					},
+				},
+				run: []testExpectedUnitResult{
+					testExpectedUnitResult{
+						outFunc: func(buf []byte) error {
+							// Example
+							// "uid=1001(_i3nbp8kbve) gid=1001(_i3nbp8kbve) groups=1001(_i3nbp8kbve) prog.cpp prog.o prog.out "
+							lines := strings.Split(string(buf), "\n")
+
+							const line0Expected = "^uid=([0-9]{4})\\([_a-z0-9]+\\) gid=([0-9]{4})\\([_a-z0-9]+\\) groups=([0-9]{4})\\([_a-z0-9]+\\) prog.cpp prog.o prog.out $"
+							if !regexp.MustCompile(line0Expected).MatchString(lines[0]) {
+								return fmt.Errorf("`%s` does not contain `%s`", lines[0], line0Expected)
+							}
+
+							return nil
+						},
+						status: &testExpectedStatus{
+							exited:     BoolOpt(true),
+							exitStatus: IntOpt(0),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	//
+	assertTestResult(t, &result, &expectedResult)
+}
+
 func TestTicketBasicParallel1(t *testing.T) {
 	ctx, err := InitContext(makeDefaultCtxOpt())
 	if err != nil {
@@ -710,29 +772,14 @@ int main() {
 	}
 
 	//
-	buildInst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
-			Envs: []string{
-				"PATH=/usr/bin",
-			},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
+	buildInst := makeCppBuildPreset()
 
 	//
 	runInsts := []*RunInstruction{
 		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     10,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -745,7 +792,7 @@ int main() {
 				false,
 			},
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     10,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -866,22 +913,7 @@ int main() {
 	}
 
 	//
-	buildInst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
-			Envs: []string{
-				"PATH=/usr/bin",
-			},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
+	buildInst := makeCppBuildPreset()
 
 	// run in parallel
 	wg := new(sync.WaitGroup)
@@ -905,7 +937,7 @@ int main() {
 						Data: []byte(strconv.Itoa(no)),
 					},
 					RunSetting: &ExecutionSetting{
-						Args:             []string{"./prog.out"},
+						Command:          "./prog.out",
 						Envs:             []string{},
 						CpuTimeLimit:     10,
 						MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -998,29 +1030,14 @@ int main() {
 	}
 
 	//
-	buildInst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
-			Envs: []string{
-				"PATH=/usr/bin",
-			},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
+	buildInst := makeCppBuildPreset()
 
 	//
 	runInsts := []*RunInstruction{
 		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     1,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -1104,29 +1121,14 @@ int main() {
 	}
 
 	//
-	buildInst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
-			Envs: []string{
-				"PATH=/usr/bin",
-			},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
+	buildInst := makeCppBuildPreset()
 
 	//
 	runInsts := []*RunInstruction{
 		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     1,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -1155,8 +1157,6 @@ int main() {
 		t.Errorf(err.Error())
 		return
 	}
-
-	t.Logf("%V", result)
 
 	//
 	expectedResult := testExpectedResult{
@@ -1217,22 +1217,7 @@ int main() {
 	}
 
 	//
-	buildInst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
-			Envs: []string{
-				"PATH=/usr/bin",
-			},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
+	buildInst := makeCppBuildPreset()
 
 	//
 	runInsts := []*RunInstruction{
@@ -1241,7 +1226,7 @@ int main() {
 				Data: []byte("300000000"), // 300MB
 			},
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     1,
 				MemoryBytesLimit: 200 * 1024 * 1024, // 200MB
@@ -1327,29 +1312,14 @@ int main() {
 	}
 
 	//
-	buildInst := &BuildInstruction{
-		CompileSetting: &ExecutionSetting{
-			Args:             []string{"/usr/bin/g++", "prog.cpp", "-c", "-o", "prog.o"},
-			Envs:             []string{},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-		LinkSetting: &ExecutionSetting{
-			Args: []string{"/usr/bin/g++", "prog.o", "-o", "prog.out"},
-			Envs: []string{
-				"PATH=/usr/bin",
-			},
-			CpuTimeLimit:     10,
-			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
-		},
-	}
+	buildInst := makeCppBuildPreset()
 
 	//
 	runInsts := []*RunInstruction{
 		&RunInstruction{
 			Stdin: nil,
 			RunSetting: &ExecutionSetting{
-				Args:             []string{"./prog.out"},
+				Command:          "./prog.out",
 				Envs:             []string{},
 				CpuTimeLimit:     10,
 				MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
@@ -1510,7 +1480,7 @@ func assertTestResult(t *testing.T, result *testResult, expect *testExpectedResu
 					t.Fatalf("[ERROR  : %s / out] validate failed : %v", tag, err)
 				}
 			} else {
-				t.Logf("[SKIPPED: %s / out]", tag)
+				t.Logf("[SKIPPED: %s / out] %v", tag, result.out)
 			}
 		}
 
@@ -1528,7 +1498,7 @@ func assertTestResult(t *testing.T, result *testResult, expect *testExpectedResu
 					t.Fatalf("[ERROR  : %s / err] validate failed : %v", tag, err)
 				}
 			} else {
-				t.Logf("[SKIPPED: %s / err]", tag)
+				t.Logf("[SKIPPED: %s / err] %v", tag, result.err)
 			}
 		}
 	}
@@ -1545,7 +1515,7 @@ func assertTestResult(t *testing.T, result *testResult, expect *testExpectedResu
 		}
 
 		assertUnit("compile", &execResult.compile, &execExpected.compile)
-		assertUnit("compile", &execResult.link, &execExpected.link)
+		assertUnit("link", &execResult.link, &execExpected.link)
 
 		// run
 		if len(execExpected.run) != len(execResult.run) {
@@ -1559,15 +1529,28 @@ func assertTestResult(t *testing.T, result *testResult, expect *testExpectedResu
 				t.Fatalf("[ERROR] execResults[%d].run[%d] is nil", execIndex, execRunIndex)
 			}
 
-			assertUnit("compile", execRunResult, &execRunExpected)
+			assertUnit("run-" + strconv.Itoa(execRunIndex), execRunResult, &execRunExpected)
 		}
 	}
 }
 
-func makeExecSpec(buildInst *BuildInstruction, runInsts []*RunInstruction) *ExecutionSpec {
-	return &ExecutionSpec{
-		BuildInst: buildInst,
-		RunInsts:  runInsts,
+//
+func makeCppBuildPreset() *BuildInstruction {
+	return &BuildInstruction{
+		CompileSetting: &ExecutionSetting{
+			Command:          "/usr/bin/g++ -c prog.cpp -o prog.o",
+			Envs:             []string{},
+			CpuTimeLimit:     10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
+		LinkSetting: &ExecutionSetting{
+			Command: "/usr/bin/g++ prog.o -o prog.out",
+			Envs: []string{
+				"PATH=/usr/bin",
+			},
+			CpuTimeLimit:     10,
+			MemoryBytesLimit: 1 * 1024 * 1024 * 1024,
+		},
 	}
 }
 
