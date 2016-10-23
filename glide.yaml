@@ -1,0 +1,6 @@
+package: torigoya_cage
+import:
+- package: gopkg.in/v1/yaml
+- package: github.com/ugorji/go
+  subpackages:
+  - codec
